@@ -4,6 +4,9 @@ import { sendError, setCache, wantsNoCache } from "../_lib/http.js";
 import { isRange, type Range } from "../../shared/types.js";
 import { buildArtistResponse } from "../_lib/meta.js";
 
+// Rendering every active ad's preview can mean many Graph calls.
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = guard(req, res);
   if (!session) return;

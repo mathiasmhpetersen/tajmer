@@ -4,6 +4,8 @@ import { sendError, setCache, wantsNoCache } from "./_lib/http.js";
 import { isRange, type Range } from "../shared/types.js";
 import { buildOverview } from "./_lib/meta.js";
 
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = guard(req, res);
   if (!session) return;

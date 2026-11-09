@@ -149,6 +149,13 @@ interface RawInsight {
   actions?: RawAction[];
 }
 
+interface RawAd {
+  id: string;
+  name: string;
+  adset?: { name?: string };
+  campaign?: { id?: string; name?: string };
+}
+
 interface RawStorySpec {
   link_data?: { image_hash?: string; message?: string; name?: string };
   video_data?: { image_hash?: string; message?: string; video_id?: string };
@@ -181,6 +188,26 @@ export async function fetchActiveCampaigns(): Promise<RawCampaign[]> {
   });
 }
 
+/**
+ * Metrics for ads that delivered in the window. The `/insights` edge only
+ * returns rows for ads with delivery, so ads Meta hasn't spent on yet simply
+ * won't appear here — we merge these onto the full active-ad list and default
+ * missing metrics to zero. No `spend > 0` filter: an active ad with 0 kr. is
+ * still shown.
+ */
+/** Every ACTIVE ad under the given campaigns, regardless of spend/delivery. */
+export async function fetchActiveAds(campaignIds: string[]): Promise<RawAd[]> {
+  if (campaignIds.length === 0) return [];
+  return graphGetAll<RawAd>(account() + "/ads", {
+    fields: "id,name,adset{name},campaign{id,name}",
+    filtering: JSON.stringify([
+      { field: "campaign.id", operator: "IN", value: campaignIds },
+      { field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] },
+    ]),
+    limit: "500",
+  });
+}
+
 export async function fetchAdInsights(
   range: Range,
   campaignIds: string[],
@@ -194,7 +221,6 @@ export async function fetchAdInsights(
     filtering: JSON.stringify([
       { field: "campaign.id", operator: "IN", value: campaignIds },
       { field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] },
-      { field: "spend", operator: "GREATER_THAN", value: 0 },
     ]),
     limit: "500",
   });
@@ -324,26 +350,52 @@ function stripPrefix(name: string): string {
 // Response builders
 // ---------------------------------------------------------------------------
 
-async function enrichAd(raw: RawInsight): Promise<AdItem> {
+interface AdBase {
+  adId: string;
+  adName: string;
+  adsetName: string;
+  campaignId: string;
+  campaignName: string;
+}
+
+interface AdMetrics {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  results: number | null;
+}
+
+const ZERO_METRICS: AdMetrics = { spend: 0, impressions: 0, clicks: 0, results: null };
+
+function metricsOf(r: RawInsight): AdMetrics {
+  return {
+    spend: Number(r.spend) || 0,
+    impressions: Number(r.impressions) || 0,
+    clicks: Number(r.clicks) || 0,
+    results: extractResults(r.actions),
+  };
+}
+
+async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const [creative, previewSrc] = await Promise.all([
-    fetchCreative(raw.ad_id).catch(() => ({}) as RawCreative),
-    fetchPreviewIframe(raw.ad_id),
+    fetchCreative(base.adId).catch(() => ({}) as RawCreative),
+    fetchPreviewIframe(base.adId),
   ]);
   const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
   const largeThumb = creative.id ? await fetchLargeThumb(creative.id) : null;
   const body = bodyOf(creative);
-  const mismatchCity = copyCheck(raw.ad_name, body);
+  const mismatchCity = copyCheck(base.adName, body);
 
   return {
-    adId: raw.ad_id,
-    adName: raw.ad_name,
-    adsetName: raw.adset_name,
-    campaignId: raw.campaign_id,
-    campaignName: raw.campaign_name,
-    spend: Number(raw.spend) || 0,
-    impressions: Number(raw.impressions) || 0,
-    clicks: Number(raw.clicks) || 0,
-    results: extractResults(raw.actions),
+    adId: base.adId,
+    adName: base.adName,
+    adsetName: base.adsetName,
+    campaignId: base.campaignId,
+    campaignName: base.campaignName,
+    spend: metrics.spend,
+    impressions: metrics.impressions,
+    clicks: metrics.clicks,
+    results: metrics.results,
     creativeId: creative.id ?? null,
     videoId: creative.video_id ?? null,
     imageHash: imageHashOf(creative),
@@ -356,7 +408,7 @@ async function enrichAd(raw: RawInsight): Promise<AdItem> {
       ctaType: creative.call_to_action_type ?? null,
     },
     flags: mismatchCity ? { checkCopy: true, checkCopyCity: mismatchCity } : {},
-    adsManagerUrl: adsManagerUrl(raw.ad_id),
+    adsManagerUrl: adsManagerUrl(base.adId),
   };
 }
 
@@ -384,13 +436,31 @@ export async function buildArtistResponse(
 
   const allCampaigns = await fetchActiveCampaigns();
   const campaigns = allCampaigns.filter((c) => campaignMatchesArtist(c.name, artist));
-  const insights = await fetchAdInsights(
-    range,
-    campaigns.map((c) => c.id),
-  );
-  insights.sort((a, b) => Number(b.spend) - Number(a.spend));
+  const campaignIds = campaigns.map((c) => c.id);
 
-  const ads = await mapLimit(insights, PREVIEW_CONCURRENCY, (row) => enrichAd(row));
+  // Every active ad is shown; insights only supply metrics (0 when undelivered).
+  const [activeAds, insights] = await Promise.all([
+    fetchActiveAds(campaignIds),
+    fetchAdInsights(range, campaignIds),
+  ]);
+  const metricsByAd = new Map(insights.map((r) => [r.ad_id, metricsOf(r)]));
+
+  const bases: AdBase[] = activeAds.map((a) => ({
+    adId: a.id,
+    adName: a.name,
+    adsetName: a.adset?.name ?? "",
+    campaignId: a.campaign?.id ?? "",
+    campaignName: a.campaign?.name ?? "",
+  }));
+  // Highest spenders first; undelivered (0 kr.) ads fall to the end.
+  bases.sort(
+    (a, b) =>
+      (metricsByAd.get(b.adId)?.spend ?? 0) - (metricsByAd.get(a.adId)?.spend ?? 0),
+  );
+
+  const ads = await mapLimit(bases, PREVIEW_CONCURRENCY, (base) =>
+    enrichAd(base, metricsByAd.get(base.adId) ?? ZERO_METRICS),
+  );
 
   const byCampaign = new Map<string, CampaignGroup>();
   for (const camp of campaigns) {
@@ -445,10 +515,13 @@ export async function buildOverview(
     .map((c) => ({ campaign: c, artist: artistForCampaign(c.name) }))
     .filter((x): x is { campaign: RawCampaign; artist: Artist } => Boolean(x.artist));
 
-  const insights = await fetchAdInsights(
-    range,
-    matched.map((m) => m.campaign.id),
-  );
+  const campaignIds = matched.map((m) => m.campaign.id);
+  // Count every active ad; insights only supply spend/impressions.
+  const [activeAdsList, insights] = await Promise.all([
+    fetchActiveAds(campaignIds),
+    fetchAdInsights(range, campaignIds),
+  ]);
+  const metricsByAd = new Map(insights.map((r) => [r.ad_id, metricsOf(r)]));
 
   const campaignToArtist = new Map<string, string>();
   for (const { campaign, artist } of matched) campaignToArtist.set(campaign.id, artist.slug);
@@ -471,17 +544,19 @@ export async function buildOverview(
     });
   }
 
-  for (const row of insights) {
-    const slug = campaignToArtist.get(row.campaign_id);
+  for (const ad of activeAdsList) {
+    const campaignId = ad.campaign?.id;
+    if (!campaignId) continue;
+    const slug = campaignToArtist.get(campaignId);
     if (!slug) continue;
     const a = agg.get(slug);
     if (!a) continue;
-    const spend = Number(row.spend) || 0;
-    a.spend += spend;
+    const m = metricsByAd.get(ad.id) ?? ZERO_METRICS;
+    a.spend += m.spend;
     a.activeAds += 1;
-    a.impressions += Number(row.impressions) || 0;
-    a.campaignIds.add(row.campaign_id);
-    a.topAds.push({ adId: row.ad_id, spend });
+    a.impressions += m.impressions;
+    a.campaignIds.add(campaignId);
+    a.topAds.push({ adId: ad.id, spend: m.spend });
   }
 
   // Thumbnails for the top 3 ads per artist (small creative thumbnails).
