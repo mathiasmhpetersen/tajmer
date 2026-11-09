@@ -1,10 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-/** Edge-cache for 5 min with a 60s stale-while-revalidate window (§2d). */
+/**
+ * Per-browser cache for 5 min with a 60s stale-while-revalidate window.
+ * MUST be `private`, not `s-maxage`: these responses are auth- and role-specific,
+ * so a shared/edge cache would serve one user's (or role's) data to another.
+ * The function therefore always runs and re-checks the auth cookie.
+ */
 export function setCache(res: VercelResponse, nocache: boolean): void {
   res.setHeader(
     "Cache-Control",
-    nocache ? "no-store" : "s-maxage=300, stale-while-revalidate=60",
+    nocache ? "no-store" : "private, max-age=300, stale-while-revalidate=60",
   );
 }
 
