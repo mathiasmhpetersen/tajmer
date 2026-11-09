@@ -1,5 +1,16 @@
 // Shared API contract between the React app and the Vercel functions.
 
+/**
+ * Two product versions share one codebase. `admin` (Mathias) sees everything;
+ * `client` sees only creatives — all spend/performance data is stripped
+ * server-side so it never reaches the browser.
+ */
+export type Role = "admin" | "client";
+
+export interface Session {
+  role: Role;
+}
+
 export type Range = "today" | "yesterday" | "last_7d";
 
 export const RANGES: { value: Range; label: string }[] = [

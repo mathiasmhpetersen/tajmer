@@ -5,12 +5,13 @@ import { isRange, type Range } from "../shared/types.js";
 import { buildOverview } from "./_lib/meta.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!guard(req, res)) return;
+  const session = guard(req, res);
+  if (!session) return;
 
   const range: Range = isRange(req.query.range) ? req.query.range : "today";
 
   try {
-    const data = await buildOverview(range);
+    const data = await buildOverview(range, session.role);
     setCache(res, wantsNoCache(req));
     return res.status(200).json(data);
   } catch (err) {

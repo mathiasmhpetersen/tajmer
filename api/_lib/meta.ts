@@ -12,6 +12,7 @@ import type {
   CampaignGroup,
   OverviewResponse,
   Range,
+  Role,
 } from "../../shared/types.js";
 import { MetaError, requireEnv } from "./http.js";
 import { DK_CITIES } from "./cities.js";
@@ -376,6 +377,7 @@ function markDuplicates(ads: AdItem[]): void {
 export async function buildArtistResponse(
   slug: string,
   range: Range,
+  role: Role = "admin",
 ): Promise<ArtistResponse> {
   const artist = ARTISTS_BY_SLUG[slug];
   if (!artist) throw new MetaError(`Ukendt kunstner: ${slug}`);
@@ -420,7 +422,7 @@ export async function buildArtistResponse(
   for (const g of groups) markDuplicates(g.ads);
   groups.sort((a, b) => b.spend - a.spend);
 
-  return {
+  const response: ArtistResponse = {
     slug: artist.slug,
     name: artist.name,
     range,
@@ -431,9 +433,13 @@ export async function buildArtistResponse(
     results: ads.reduce((s, a) => s + (a.results ?? 0), 0),
     campaigns: groups,
   };
+  return role === "client" ? stripArtistForClient(response) : response;
 }
 
-export async function buildOverview(range: Range): Promise<OverviewResponse> {
+export async function buildOverview(
+  range: Range,
+  role: Role = "admin",
+): Promise<OverviewResponse> {
   const allCampaigns = await fetchActiveCampaigns();
   const matched = allCampaigns
     .map((c) => ({ campaign: c, artist: artistForCampaign(c.name) }))
@@ -514,7 +520,7 @@ export async function buildOverview(range: Range): Promise<OverviewResponse> {
   for (const a of agg.values()) for (const id of a.campaignIds) campaignsRunning.add(id);
   const biggest = [...artists].sort((a, b) => b.spend - a.spend)[0];
 
-  return {
+  const response: OverviewResponse = {
     range,
     totalSpend,
     activeAds,
@@ -524,5 +530,41 @@ export async function buildOverview(range: Range): Promise<OverviewResponse> {
         ? { slug: biggest.slug, name: biggest.name, spend: biggest.spend }
         : null,
     artists,
+  };
+  return role === "client" ? stripOverviewForClient(response) : response;
+}
+
+// ---------------------------------------------------------------------------
+// Client stripping — spend/performance must never reach the client browser,
+// not even in the network tab. Counts, names, creatives and previews stay.
+// ---------------------------------------------------------------------------
+
+function stripArtistForClient(r: ArtistResponse): ArtistResponse {
+  return {
+    ...r,
+    totalSpend: 0,
+    impressions: 0,
+    clicks: 0,
+    results: 0,
+    campaigns: r.campaigns.map((c) => ({
+      ...c,
+      spend: 0,
+      ads: c.ads.map((ad) => ({
+        ...ad,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        results: null,
+      })),
+    })),
+  };
+}
+
+function stripOverviewForClient(r: OverviewResponse): OverviewResponse {
+  return {
+    ...r,
+    totalSpend: 0,
+    biggestSpender: null,
+    artists: r.artists.map((a) => ({ ...a, spend: 0, impressions: 0 })),
   };
 }
