@@ -10,10 +10,14 @@ import { ctaLabel } from "@/lib/cta";
 const FRAME_WIDTH = 335;
 const FRAME_HEIGHT = 620;
 
-/** The real Meta MOBILE_FEED_STANDARD preview, with a poster until it loads. */
+/**
+ * The real Meta MOBILE_FEED_STANDARD preview, rendered directly — the full feed
+ * card (page header, primary text, media, CTA, reactions, comments) shows from
+ * the start. No thumbnail poster overlay: it only hid the feed chrome until the
+ * iframe loaded.
+ */
 function AdPreviewFrame({ ad }: { ad: AdItem }) {
   const { preview } = ad;
-  const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
   if (!preview.iframeSrc || failed) return <FeedFallback ad={ad} />;
@@ -31,34 +35,9 @@ function AdPreviewFrame({ ad }: { ad: AdItem }) {
         scrolling="no"
         allow="autoplay; encrypted-media"
         loading="lazy"
-        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
         className="no-scrollbar block h-full w-full border-0"
       />
-      {/* Poster shown until the iframe paints. */}
-      <div
-        className="pointer-events-none absolute inset-0 transition-opacity duration-500"
-        style={{ opacity: loaded ? 0 : 1 }}
-        aria-hidden
-      >
-        {preview.thumbnailUrl ? (
-          <img
-            src={preview.thumbnailUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="h-full w-full bg-[#e9eaed]" />
-        )}
-        {preview.isVideo && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="flex size-14 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm">
-              <Play className="size-6 translate-x-0.5 fill-white text-white" />
-            </span>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
