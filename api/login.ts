@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { passwordMatches, setAuthCookie } from "./_lib/auth";
+import { passwordMatches, setAuthCookie } from "./_lib/auth.js";
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {

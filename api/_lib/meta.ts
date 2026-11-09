@@ -4,7 +4,7 @@ import {
   artistForCampaign,
   campaignMatchesArtist,
   type Artist,
-} from "../../shared/artists";
+} from "../../shared/artists.js";
 import type {
   AdItem,
   ArtistResponse,
@@ -12,9 +12,9 @@ import type {
   CampaignGroup,
   OverviewResponse,
   Range,
-} from "../../shared/types";
-import { MetaError, requireEnv } from "./http";
-import { DK_CITIES } from "./cities";
+} from "../../shared/types.js";
+import { MetaError, requireEnv } from "./http.js";
+import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
 
