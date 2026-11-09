@@ -51,7 +51,8 @@ Copy `.env.example` → `.env` for local dev, and set the same three in Vercel
 | `META_ACCESS_TOKEN`   | System User token with `ads_read`                   |
 | `META_AD_ACCOUNT_ID`  | `1222051031227513` (without the `act_` prefix)      |
 | `META_API_VERSION`    | optional, defaults to `v21.0`                       |
-| `SITE_PASSWORD`       | password for the login gate                         |
+| `SITE_PASSWORD`       | admin password — full dashboard                     |
+| `CLIENT_PASSWORD`     | client password — creatives only, spend hidden (optional) |
 
 ## Local development
 
@@ -70,6 +71,23 @@ Other scripts:
 pnpm build        # vite build → dist/public
 pnpm typecheck    # tsc for client + api
 ```
+
+## Two versions (admin / client)
+
+One codebase serves two versions, chosen by which password you log in with:
+
+- **Admin** (`SITE_PASSWORD`) — the full dashboard: spend, impressions, clicks,
+  results, KPI rows, range toggle, Ads Manager links and internal flags.
+- **Client** (`CLIENT_PASSWORD`) — a clean creative-review view: artist list and
+  ad previews only. All spend/performance data is **stripped on the server**
+  (`stripOverviewForClient` / `stripArtistForClient` in `api/_lib/meta.ts`), so
+  it never reaches the client's browser — not even in the network tab. The UI
+  additionally hides KPI cards, the range toggle, per-ad metrics, the Ads Manager
+  button and QA flags, and renames "Kunstnere" → "Artister".
+
+The role is carried in the signed `tajmer_auth` cookie; `/api/session` reports it
+to the app on load. The admin cookie signature is unchanged from the single-role
+build, so existing admin logins keep working.
 
 ## Deploy (Vercel)
 

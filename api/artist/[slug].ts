@@ -4,8 +4,12 @@ import { sendError, setCache, wantsNoCache } from "../_lib/http.js";
 import { isRange, type Range } from "../../shared/types.js";
 import { buildArtistResponse } from "../_lib/meta.js";
 
+// Rendering every active ad's preview can mean many Graph calls.
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!guard(req, res)) return;
+  const session = guard(req, res);
+  if (!session) return;
 
   const slugParam = req.query.slug;
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
@@ -14,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const range: Range = isRange(req.query.range) ? req.query.range : "today";
 
   try {
-    const data = await buildArtistResponse(slug, range);
+    const data = await buildArtistResponse(slug, range, session.role);
     setCache(res, wantsNoCache(req));
     return res.status(200).json(data);
   } catch (err) {

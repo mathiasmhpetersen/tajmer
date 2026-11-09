@@ -1,27 +1,44 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { Role, Session } from "../../shared/types.js";
 
 export const AUTH_COOKIE = "tajmer_auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
-const SIGNED_MESSAGE = "tajmer-auth-v1";
 
-/**
- * The cookie value is an HMAC keyed by SITE_PASSWORD. It can't be forged without
- * knowing the password, and we never store the password itself. Good enough for
- * an internal tool (§6) — no auth provider.
- */
-function expectedToken(): string | null {
-  const password = process.env.SITE_PASSWORD;
-  if (!password) return null;
-  return createHmac("sha256", password).update(SIGNED_MESSAGE).digest("hex");
+// The admin message is unchanged from the original single-role build, so any
+// existing admin cookie stays valid — "don't change anything for my login".
+const ROLE_MESSAGE: Record<Role, string> = {
+  admin: "tajmer-auth-v1",
+  client: "tajmer-client-v1",
+};
+
+function secretFor(role: Role): string | undefined {
+  return role === "admin" ? process.env.SITE_PASSWORD : process.env.CLIENT_PASSWORD;
 }
 
-export function passwordMatches(input: string): boolean {
-  const password = process.env.SITE_PASSWORD;
-  if (!password) return false;
-  const a = Buffer.from(input);
-  const b = Buffer.from(password);
-  return a.length === b.length && timingSafeEqual(a, b);
+/**
+ * Cookie value is an HMAC keyed by that role's password. It can't be forged
+ * without the password, and we never store the password itself (§6).
+ */
+function tokenFor(role: Role): string | null {
+  const secret = secretFor(role);
+  if (!secret) return null;
+  return createHmac("sha256", secret).update(ROLE_MESSAGE[role]).digest("hex");
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/** Which role (if any) does this password unlock? Admin wins ties. */
+export function roleForPassword(input: string): Role | null {
+  for (const role of ["admin", "client"] as const) {
+    const secret = secretFor(role);
+    if (secret && safeEqual(input, secret)) return role;
+  }
+  return null;
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -37,18 +54,19 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
-export function isAuthed(req: VercelRequest): boolean {
-  const expected = expectedToken();
-  if (!expected) return false;
+/** Resolve the session from the auth cookie, or null if unauthenticated. */
+export function getSession(req: VercelRequest): Session | null {
   const token = parseCookies(req.headers.cookie)[AUTH_COOKIE];
-  if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (!token) return null;
+  for (const role of ["admin", "client"] as const) {
+    const expected = tokenFor(role);
+    if (expected && safeEqual(token, expected)) return { role };
+  }
+  return null;
 }
 
-export function setAuthCookie(res: VercelResponse): void {
-  const token = expectedToken();
+export function setAuthCookie(res: VercelResponse, role: Role): void {
+  const token = tokenFor(role);
   if (!token) return;
   res.setHeader(
     "Set-Cookie",
@@ -56,9 +74,10 @@ export function setAuthCookie(res: VercelResponse): void {
   );
 }
 
-/** Returns true if the request is allowed to proceed; otherwise writes a 401. */
-export function guard(req: VercelRequest, res: VercelResponse): boolean {
-  if (isAuthed(req)) return true;
+/** Returns the session if authed; otherwise writes a 401 and returns null. */
+export function guard(req: VercelRequest, res: VercelResponse): Session | null {
+  const session = getSession(req);
+  if (session) return session;
   res.status(401).json({ error: "Not authenticated" });
-  return false;
+  return null;
 }

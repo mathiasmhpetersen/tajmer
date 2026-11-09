@@ -3,9 +3,15 @@ import { ArrowUpRight, ImageOff } from "lucide-react";
 import type { ArtistSummary } from "@shared/types";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useIsClient } from "@/lib/session";
 
 export function ArtistCard({ artist }: { artist: ArtistSummary }) {
   const idle = artist.activeAds === 0;
+  const isClient = useIsClient();
+  const countLabel = `${artist.activeAds} ${
+    artist.activeAds === 1 ? "annonce" : "annoncer"
+  }`;
+
   return (
     <Link
       href={`/${artist.slug}`}
@@ -17,20 +23,24 @@ export function ArtistCard({ artist }: { artist: ArtistSummary }) {
           <p className="mt-0.5 text-[13px] text-muted">
             {idle
               ? "Ingen aktive annoncer"
-              : `${artist.activeAds} ${artist.activeAds === 1 ? "annonce" : "annoncer"} med forbrug`}
+              : isClient
+                ? `${countLabel} aktive`
+                : `${countLabel} med forbrug`}
           </p>
         </div>
         <ArrowUpRight className="size-4 text-faint transition-colors group-hover:text-muted" />
       </div>
 
-      <div
-        className={cn(
-          "tnum mt-5 text-[1.9rem] font-semibold leading-none tracking-tightest",
-          idle ? "text-faint" : "text-accent",
-        )}
-      >
-        {formatMoney(artist.spend)}
-      </div>
+      {!isClient && (
+        <div
+          className={cn(
+            "tnum mt-5 text-[1.9rem] font-semibold leading-none tracking-tightest",
+            idle ? "text-faint" : "text-accent",
+          )}
+        >
+          {formatMoney(artist.spend)}
+        </div>
+      )}
 
       <div className="mt-5 flex gap-2">
         {Array.from({ length: 3 }).map((_, i) => {

@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { LayoutGrid, Mic2 } from "lucide-react";
 import { ARTISTS } from "@shared/artists";
 import { cn } from "@/lib/cn";
+import { useIsClient } from "@/lib/session";
 import { ThemeToggle } from "./ThemeToggle";
 
 function NavItem({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
@@ -30,6 +31,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function Sidebar() {
   const [location] = useLocation();
+  const isClient = useIsClient();
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-hairline bg-page md:flex">
@@ -46,7 +48,7 @@ export function Sidebar() {
         </div>
 
         <nav className="mt-2 flex flex-1 flex-col overflow-y-auto">
-          <SectionLabel>Kunstnere</SectionLabel>
+          <SectionLabel>{isClient ? "Artister" : "Kunstnere"}</SectionLabel>
           <div className="flex flex-col gap-0.5">
             {ARTISTS.map((artist) => (
               <NavItem

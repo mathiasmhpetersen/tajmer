@@ -4,6 +4,8 @@ import { RefreshCw } from "lucide-react";
 import type { Range } from "@shared/types";
 import { ARTISTS } from "@shared/artists";
 import { fetchOverview } from "@/lib/api";
+import { useIsClient } from "@/lib/session";
+import { cn } from "@/lib/cn";
 import { formatMoneyWhole, formatNumber, formatToday } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { RangeToggle } from "@/components/RangeToggle";
@@ -16,6 +18,7 @@ import { ErrorState } from "@/components/States";
 export function Overview() {
   const [range, setRange] = useState<Range>("today");
   const forceRef = useRef(false);
+  const isClient = useIsClient();
 
   const query = useQuery({
     queryKey: ["overview", range],
@@ -38,14 +41,20 @@ export function Overview() {
       <PageHeader
         dateline={formatToday()}
         title={
-          <>
-            Hej Mathias <span className="align-middle">👋</span>
-          </>
+          isClient ? (
+            "Aktive annoncer"
+          ) : (
+            <>
+              Hej Mathias <span className="align-middle">👋</span>
+            </>
+          )
         }
-        meta={`Aktive annoncer på tværs af ${ARTISTS.length} kunstnere`}
+        meta={`${isClient ? "På tværs af" : "Aktive annoncer på tværs af"} ${
+          ARTISTS.length
+        } ${isClient ? "artister" : "kunstnere"}`}
         actions={
           <>
-            <RangeToggle value={range} onChange={setRange} />
+            {!isClient && <RangeToggle value={range} onChange={setRange} />}
             <Button
               variant="ghost"
               size="sm"
@@ -62,42 +71,48 @@ export function Overview() {
         <ErrorState message={(query.error as Error).message} onRetry={refresh} />
       ) : (
         <>
-          {query.isLoading || !data ? (
-            <KpiRowSkeleton />
-          ) : (
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <KpiCard
-                label="Forbrug i dag"
-                value={formatMoneyWhole(data.totalSpend)}
-                helper="På tværs af alle kunstnere"
-                tone="accent"
-              />
-              <KpiCard
-                label="Aktive annoncer"
-                value={formatNumber(data.activeAds)}
-                helper="Med forbrug i perioden"
-              />
-              <KpiCard
-                label="Kampagner i gang"
-                value={formatNumber(data.campaignsRunning)}
-                helper="Aktive kampagner med forbrug"
-              />
-              <KpiCard
-                label="Største forbrug"
-                value={data.biggestSpender?.name ?? "—"}
-                helper={
-                  data.biggestSpender
-                    ? formatMoneyWhole(data.biggestSpender.spend)
-                    : "Ingen forbrug endnu"
-                }
-                tone="success"
-                href={data.biggestSpender ? `/${data.biggestSpender.slug}` : undefined}
-              />
-            </div>
-          )}
+          {!isClient &&
+            (query.isLoading || !data ? (
+              <KpiRowSkeleton />
+            ) : (
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <KpiCard
+                  label="Forbrug i dag"
+                  value={formatMoneyWhole(data.totalSpend)}
+                  helper="På tværs af alle kunstnere"
+                  tone="accent"
+                />
+                <KpiCard
+                  label="Aktive annoncer"
+                  value={formatNumber(data.activeAds)}
+                  helper="Med forbrug i perioden"
+                />
+                <KpiCard
+                  label="Kampagner i gang"
+                  value={formatNumber(data.campaignsRunning)}
+                  helper="Aktive kampagner med forbrug"
+                />
+                <KpiCard
+                  label="Største forbrug"
+                  value={data.biggestSpender?.name ?? "—"}
+                  helper={
+                    data.biggestSpender
+                      ? formatMoneyWhole(data.biggestSpender.spend)
+                      : "Ingen forbrug endnu"
+                  }
+                  tone="success"
+                  href={data.biggestSpender ? `/${data.biggestSpender.slug}` : undefined}
+                />
+              </div>
+            ))}
 
-          <h2 className="mb-4 mt-10 text-sm font-semibold uppercase tracking-wider text-faint">
-            Kunstnere
+          <h2
+            className={cn(
+              "mb-4 text-sm font-semibold uppercase tracking-wider text-faint",
+              isClient ? "mt-2" : "mt-10",
+            )}
+          >
+            {isClient ? "Artister" : "Kunstnere"}
           </h2>
 
           {query.isLoading || !data ? (

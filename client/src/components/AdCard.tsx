@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ExternalLink, Play, Copy, AlertTriangle } from "lucide-react";
 import type { AdItem } from "@shared/types";
 import { formatCompact, formatMoney } from "@/lib/format";
+import { useIsClient } from "@/lib/session";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { ctaLabel } from "@/lib/cta";
@@ -117,56 +118,64 @@ function FeedFallback({ ad }: { ad: AdItem }) {
 
 export function AdCard({ ad }: { ad: AdItem }) {
   const typeLabel = ad.preview.isVideo ? "VIDEO" : "BILLEDE";
+  const isClient = useIsClient();
+
   return (
     <div className="flex flex-col gap-2.5">
-      {/* Ad name + flags, above the card */}
+      {/* Ad name + flags, above the card. Flags are internal-only. */}
       <div className="flex items-start justify-between gap-2 px-0.5">
         <div className="min-w-0 truncate text-[13px] font-semibold">
           <span className="text-faint">{typeLabel}</span>
           <span className="mx-1.5 text-faint">|</span>
           <span className="text-ink">{ad.adName}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {ad.flags.duplicate && (
-            <Badge tone="warning">
-              <Copy className="size-3" /> Dublet
-            </Badge>
-          )}
-          {ad.flags.checkCopy && (
-            <Badge tone="warning" className="whitespace-nowrap">
-              <AlertTriangle className="size-3" /> Tjek copy
-            </Badge>
-          )}
-        </div>
+        {!isClient && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {ad.flags.duplicate && (
+              <Badge tone="warning">
+                <Copy className="size-3" /> Dublet
+              </Badge>
+            )}
+            {ad.flags.checkCopy && (
+              <Badge tone="warning" className="whitespace-nowrap">
+                <AlertTriangle className="size-3" /> Tjek copy
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
       <AdPreviewFrame ad={ad} />
 
-      {/* Metrics line */}
-      <div className="tnum flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5 text-[13px] text-muted">
-        <span className="font-semibold text-ink">{formatMoney(ad.spend)}</span>
-        <span className="text-faint">·</span>
-        <span>{formatCompact(ad.impressions)} imp.</span>
-        <span className="text-faint">·</span>
-        <span>{formatCompact(ad.clicks)} klik</span>
-        {ad.results != null && ad.results > 0 && (
-          <>
+      {!isClient && (
+        <>
+          {/* Metrics line */}
+          <div className="tnum flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5 text-[13px] text-muted">
+            <span className="font-semibold text-ink">{formatMoney(ad.spend)}</span>
             <span className="text-faint">·</span>
-            <span className="text-success">{formatCompact(ad.results)} resultater</span>
-          </>
-        )}
-      </div>
+            <span>{formatCompact(ad.impressions)} imp.</span>
+            <span className="text-faint">·</span>
+            <span>{formatCompact(ad.clicks)} klik</span>
+            {ad.results != null && ad.results > 0 && (
+              <>
+                <span className="text-faint">·</span>
+                <span className="text-success">{formatCompact(ad.results)} resultater</span>
+              </>
+            )}
+          </div>
 
-      <div className="px-0.5">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full"
-          onClick={() => window.open(ad.adsManagerUrl, "_blank", "noopener")}
-        >
-          <ExternalLink className="size-3.5" /> Åbn i Ads Manager
-        </Button>
-      </div>
+          <div className="px-0.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => window.open(ad.adsManagerUrl, "_blank", "noopener")}
+            >
+              <ExternalLink className="size-3.5" /> Åbn i Ads Manager
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

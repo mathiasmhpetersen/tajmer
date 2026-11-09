@@ -1,7 +1,15 @@
 import { useState } from "react";
-import { QueryClient, QueryClientProvider, QueryCache } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryCache,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { Route, Switch } from "wouter";
-import { UnauthorizedError } from "@/lib/api";
+import { fetchSession, UnauthorizedError } from "@/lib/api";
+import { RoleProvider } from "@/lib/session";
 import { Layout } from "@/components/Layout";
 import { Overview } from "@/pages/Overview";
 import { ArtistPage } from "@/pages/ArtistPage";
@@ -10,14 +18,14 @@ import { Login } from "@/pages/Login";
 const FIVE_MIN = 5 * 60 * 1000;
 
 export function App() {
-  const [authed, setAuthed] = useState(true);
+  const [needLogin, setNeedLogin] = useState(false);
 
   const [client] = useState(
     () =>
       new QueryClient({
         queryCache: new QueryCache({
           onError: (err) => {
-            if (err instanceof UnauthorizedError) setAuthed(false);
+            if (err instanceof UnauthorizedError) setNeedLogin(true);
           },
         }),
         defaultOptions: {
@@ -25,32 +33,62 @@ export function App() {
             staleTime: 60_000,
             refetchOnWindowFocus: false,
             refetchInterval: FIVE_MIN,
-            retry: (count, err) =>
-              !(err instanceof UnauthorizedError) && count < 1,
+            retry: (count, err) => !(err instanceof UnauthorizedError) && count < 1,
           },
         },
       }),
   );
 
-  if (!authed) {
+  return (
+    <QueryClientProvider client={client}>
+      <Gate needLogin={needLogin} setNeedLogin={setNeedLogin} />
+    </QueryClientProvider>
+  );
+}
+
+function Gate({
+  needLogin,
+  setNeedLogin,
+}: {
+  needLogin: boolean;
+  setNeedLogin: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const session = useQuery({
+    queryKey: ["session"],
+    queryFn: fetchSession,
+    retry: false,
+    staleTime: Infinity,
+    refetchInterval: false,
+  });
+
+  if (needLogin || session.isError || (session.isFetched && !session.data)) {
     return (
       <Login
         onSuccess={() => {
-          setAuthed(true);
-          client.clear();
+          setNeedLogin(false);
+          qc.resetQueries();
         }}
       />
     );
   }
 
+  if (!session.data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-page text-faint">
+        <Loader2 className="size-6 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <QueryClientProvider client={client}>
+    <RoleProvider role={session.data.role}>
       <Layout>
         <Switch>
           <Route path="/" component={Overview} />
           <Route path="/:slug">{(params) => <ArtistPage slug={params.slug} />}</Route>
         </Switch>
       </Layout>
-    </QueryClientProvider>
+    </RoleProvider>
   );
 }
