@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { guard } from "./_lib/auth";
-import { sendError, setCache, wantsNoCache } from "./_lib/http";
-import { isRange, type Range } from "../shared/types";
-import { buildOverview } from "./_lib/meta";
+import { guard } from "./_lib/auth.js";
+import { sendError, setCache, wantsNoCache } from "./_lib/http.js";
+import { isRange, type Range } from "../shared/types.js";
+import { buildOverview } from "./_lib/meta.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guard(req, res)) return;
