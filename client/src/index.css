@@ -1,0 +1,92 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Design tokens. Dark is default (:root); .light overrides. Colours are stored
+   as "R G B" triplets so Tailwind's `/ <alpha-value>` works.
+   Mirrors nordbirkvej.vercel.app: near-black page, one-step-lighter cards,
+   hairline borders, one warm orange accent, green = good, amber = warning.
+--------------------------------------------------------------------------- */
+:root,
+.dark {
+  --page: 14 14 15; /* #0e0e0f */
+  --card: 22 22 24; /* #161618 */
+  --card-2: 28 28 31; /* hover / nested */
+  --hairline: rgba(255, 255, 255, 0.06);
+  --ink: 237 237 240; /* near-white */
+  --muted: 150 150 158; /* secondary grey */
+  --faint: 104 104 112; /* tertiary grey */
+  --accent: 240 160 80; /* #f0a050 warm orange */
+  --accent-ink: 20 15 8; /* text on accent fills */
+  --success: 94 198 138; /* green */
+  --warning: 232 178 86; /* amber */
+}
+
+.light {
+  --page: 247 247 248;
+  --card: 255 255 255;
+  --card-2: 248 248 249;
+  --hairline: rgba(10, 10, 15, 0.08);
+  --ink: 24 24 27;
+  --muted: 90 90 98;
+  --faint: 140 140 148;
+  --accent: 214 126 42;
+  --accent-ink: 255 250 244;
+  --success: 32 150 92;
+  --warning: 176 118 20;
+}
+
+* {
+  border-color: var(--hairline);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  @apply bg-page text-ink font-sans antialiased;
+  margin: 0;
+  font-feature-settings: "cv01" 1, "cv11" 1;
+}
+
+/* Tabular, lining numerals for all money/metric figures. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Hairline border utility that tracks the theme variable. */
+.border-hairline {
+  border-color: var(--hairline);
+}
+
+/* The Meta preview iframe must never show its own scrollbar. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
