@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isAdminOrAgent } from "../../_lib/auth.js";
 import { readJsonBody, sendError, setCache } from "../../_lib/http.js";
-import { KVError, resolveFeedback } from "../../_lib/kv.js";
+import { KVError, resolveBatch, resolveFeedback } from "../../_lib/kv.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -15,13 +15,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCache(res, true);
 
   const body = readJsonBody(req);
-  const adId = typeof body.adId === "string" ? body.adId : null;
-  const feedbackId = typeof body.feedbackId === "string" ? body.feedbackId : null;
   const note = typeof body.note === "string" ? body.note.trim() || undefined : undefined;
-  const fixedAdId = typeof body.fixedAdId === "string" ? body.fixedAdId.trim() || undefined : undefined;
-  if (!adId || !feedbackId) return res.status(400).json({ error: "Mangler adId/feedbackId" });
 
   try {
+    // Batch resolve: { batchId, note?, fixedAdIds?: { adId: fixedAdId } }
+    if (typeof body.batchId === "string" && body.batchId) {
+      const fixedAdIds =
+        body.fixedAdIds && typeof body.fixedAdIds === "object"
+          ? (body.fixedAdIds as Record<string, string>)
+          : undefined;
+      const count = await resolveBatch(body.batchId, "admin", { note, fixedAdIds });
+      if (count === 0) return res.status(404).json({ error: "Batch findes ikke" });
+      return res.status(200).json({ ok: true, count });
+    }
+
+    // Single resolve: { adId, feedbackId, note?, fixedAdId? }
+    const adId = typeof body.adId === "string" ? body.adId : null;
+    const feedbackId = typeof body.feedbackId === "string" ? body.feedbackId : null;
+    const fixedAdId =
+      typeof body.fixedAdId === "string" ? body.fixedAdId.trim() || undefined : undefined;
+    if (!adId || !feedbackId) return res.status(400).json({ error: "Mangler adId/feedbackId" });
+
     const ok = await resolveFeedback(adId, feedbackId, "admin", { note, fixedAdId });
     if (!ok) return res.status(404).json({ error: "Rettelse findes ikke" });
     return res.status(200).json({ ok: true });

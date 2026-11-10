@@ -14,6 +14,7 @@ import { Layout } from "@/components/Layout";
 import { Overview } from "@/pages/Overview";
 import { ArtistPage } from "@/pages/ArtistPage";
 import { Preview } from "@/pages/Preview";
+import { ClientPreview } from "@/pages/ClientPreview";
 import { Login } from "@/pages/Login";
 
 const FIVE_MIN = 5 * 60 * 1000;
@@ -82,15 +83,24 @@ function Gate({
     );
   }
 
+  const isClient = session.data.role === "client";
+
   return (
     <RoleProvider role={session.data.role}>
-      <Layout>
-        <Switch>
-          <Route path="/" component={Overview} />
-          <Route path="/preview" component={Preview} />
-          <Route path="/:slug">{(params) => <ArtistPage slug={params.slug} />}</Route>
-        </Switch>
-      </Layout>
+      <Switch>
+        {/* The client review experience is its own light, sidebar-less layout. */}
+        <Route path="/preview">
+          {() => (isClient ? <ClientPreview /> : <Layout><Preview /></Layout>)}
+        </Route>
+        <Route path="/">{() => <Layout><Overview /></Layout>}</Route>
+        <Route path="/:slug">
+          {(params) => (
+            <Layout>
+              <ArtistPage slug={params.slug} />
+            </Layout>
+          )}
+        </Route>
+      </Switch>
     </RoleProvider>
   );
 }

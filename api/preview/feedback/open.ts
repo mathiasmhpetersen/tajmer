@@ -38,6 +38,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 text: f.text,
                 role: f.role,
                 createdAt: f.createdAt,
+                // Structured fields so the agent can apply bulk corrections
+                // deterministically (no free-text parsing).
+                batchId: f.batchId ?? null,
+                field: f.field ?? null,
+                method: f.method ?? null,
               })),
           });
         }

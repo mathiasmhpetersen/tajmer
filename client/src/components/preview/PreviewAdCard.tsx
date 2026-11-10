@@ -17,10 +17,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ScaledPreview } from "@/components/ScaledPreview";
 import { ctaLabel } from "@/lib/cta";
-
-const FRAME_WIDTH = 335;
-const DEFAULT_FRAME_HEIGHT = 620;
 
 const STATUS_TONE: Record<PreviewStatus, "neutral" | "success" | "warning"> = {
   afventer: "neutral",
@@ -34,46 +32,20 @@ export function roleLabel(role: Role): string {
 
 function PreviewFrame({ ad }: { ad: PreviewAd }) {
   const { preview } = ad;
-  const [failed, setFailed] = useState(false);
 
-  const frameHeight = preview.frameHeight || DEFAULT_FRAME_HEIGHT;
-
-  if (preview.iframeSrc && !failed) {
-    return (
-      <div
-        className="relative mx-auto overflow-hidden rounded-tile bg-white"
-        style={{ width: "100%", maxWidth: FRAME_WIDTH, height: frameHeight }}
-      >
-        <iframe
-          title={ad.adName}
-          src={preview.iframeSrc}
-          width={FRAME_WIDTH}
-          height={frameHeight}
-          scrolling="no"
-          allow="autoplay; encrypted-media"
-          loading="lazy"
-          onError={() => setFailed(true)}
-          className="no-scrollbar block h-full w-full border-0"
-        />
-      </div>
-    );
+  if (preview.iframeSrc) {
+    return <ScaledPreview src={preview.iframeSrc} title={ad.adName} />;
   }
 
   // Fallback: media + text if the Graph preview fails.
   return (
     <div
-      className="mx-auto flex flex-col overflow-hidden rounded-tile border border-black/10 bg-white text-[#050505]"
-      style={{ width: "100%", maxWidth: FRAME_WIDTH }}
+      className="mx-auto flex w-full max-w-[400px] flex-col overflow-hidden rounded-xl border border-black/10 bg-white text-[#050505]"
     >
       {preview.body && (
         <p className="px-3 pb-2 pt-3 text-[13px] leading-snug line-clamp-3">{preview.body}</p>
       )}
-      <div
-        className={cn(
-          "relative w-full bg-[#e9eaed]",
-          preview.aspect === "portrait" ? "aspect-[9/16]" : "aspect-[4/5]",
-        )}
-      >
+      <div className="relative aspect-[4/5] w-full bg-[#e9eaed]">
         {preview.thumbnailUrl && (
           <img src={preview.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         )}

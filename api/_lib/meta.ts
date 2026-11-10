@@ -10,7 +10,6 @@ import type {
   ArtistResponse,
   ArtistSummary,
   CampaignGroup,
-  MediaAspect,
   OverviewResponse,
   PreviewAd,
   PreviewArtistGroup,
@@ -22,37 +21,7 @@ import type {
 } from "../../shared/types.js";
 import { MetaError, requireEnv } from "./http.js";
 import { readState } from "./kv.js";
-import { fetchImageAspect } from "./imagesize.js";
 import { DK_CITIES } from "./cities.js";
-
-// Feed-card sizing. Meta's preview reports a fixed height (450 for a 16:9 card,
-// media 188px tall at 335 wide) → ~262px of chrome. Primary text is truncated to
-// ~3 lines so chrome is near-constant; we add media height for the real height.
-const FRAME_WIDTH = 335;
-const FRAME_CHROME = 262;
-const DEFAULT_FRAME_HEIGHT = 620;
-const PORTRAIT_MAX_ASPECT = 0.7; // w/h below this is portrait (9:16=0.56, 4:5=0.8)
-
-function frameFromAspect(ratio: number | null): { frameHeight: number; aspect: MediaAspect } {
-  if (!ratio || !Number.isFinite(ratio) || ratio <= 0) {
-    return { frameHeight: DEFAULT_FRAME_HEIGHT, aspect: "standard" };
-  }
-  const mediaHeight = Math.round(FRAME_WIDTH / ratio);
-  return {
-    frameHeight: Math.min(mediaHeight + FRAME_CHROME, 1120),
-    aspect: ratio < PORTRAIT_MAX_ASPECT ? "portrait" : "standard",
-  };
-}
-
-function mediaImageUrlOf(c: RawCreative): string | null {
-  return (
-    c.object_story_spec?.video_data?.image_url ??
-    c.object_story_spec?.link_data?.picture ??
-    c.image_url ??
-    c.thumbnail_url ??
-    null
-  );
-}
 
 const PREVIEW_CONCURRENCY = 8;
 
@@ -452,11 +421,7 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
     fetchPreviewIframe(base.adId),
   ]);
   const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
-  const [largeThumb, ratio] = await Promise.all([
-    creative.id ? fetchLargeThumb(creative.id) : Promise.resolve(null),
-    fetchImageAspect(mediaImageUrlOf(creative)),
-  ]);
-  const { frameHeight, aspect } = frameFromAspect(ratio);
+  const largeThumb = creative.id ? await fetchLargeThumb(creative.id) : null;
   const body = bodyOf(creative);
   const mismatchCity = copyCheck(base.adName, body);
 
@@ -480,8 +445,6 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       body,
       title: creative.title ?? creative.object_story_spec?.link_data?.name ?? null,
       ctaType: creative.call_to_action_type ?? null,
-      frameHeight,
-      aspect,
     },
     flags: mismatchCity ? { checkCopy: true, checkCopyCity: mismatchCity } : {},
     adsManagerUrl: adsManagerUrl(base.adId),
@@ -690,7 +653,7 @@ export async function buildOverview(
 // not even in the network tab. Counts, names, creatives and previews stay.
 // ---------------------------------------------------------------------------
 
-function stripArtistForClient(r: ArtistResponse): ArtistResponse {
+export function stripArtistForClient(r: ArtistResponse): ArtistResponse {
   return {
     ...r,
     totalSpend: 0,
@@ -700,7 +663,8 @@ function stripArtistForClient(r: ArtistResponse): ArtistResponse {
     campaigns: r.campaigns.map((c) => ({
       ...c,
       spend: 0,
-      ads: c.ads.map((ad) => ({
+      // Drop adsManagerUrl entirely — it exposes the account id (act=…).
+      ads: c.ads.map(({ adsManagerUrl: _drop, ...ad }) => ({
         ...ad,
         spend: 0,
         impressions: 0,
@@ -711,7 +675,7 @@ function stripArtistForClient(r: ArtistResponse): ArtistResponse {
   };
 }
 
-function stripOverviewForClient(r: OverviewResponse): OverviewResponse {
+export function stripOverviewForClient(r: OverviewResponse): OverviewResponse {
   return {
     ...r,
     totalSpend: 0,
@@ -833,21 +797,16 @@ export async function buildPreview(
 
   // Full creative + live, non-persisted MOBILE_FEED_STANDARD preview — only for
   // qualifying ads, and skipped entirely for the agent endpoint.
-  const detailByAd = new Map<
-    string,
-    { creative: RawCreative; iframe: string | null; ratio: number | null }
-  >();
+  const detailByAd = new Map<string, { creative: RawCreative; iframe: string | null }>();
   if (withPreviews) {
     const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
       const [creative, iframe] = await Promise.all([
         fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative),
         fetchPreviewIframe(ad.id),
       ]);
-      const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
-      return { id: ad.id, creative, iframe, ratio };
+      return { id: ad.id, creative, iframe };
     });
-    for (const d of details)
-      detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe, ratio: d.ratio });
+    for (const d of details) detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe });
   }
 
   const { approvals, feedback } = await readState(
@@ -860,7 +819,6 @@ export async function buildPreview(
     const detail = detailByAd.get(ad.id);
     const creative = detail?.creative ?? ad.creative ?? {};
     const creativeId = creative.id ?? ad.creative?.id ?? null;
-    const { frameHeight, aspect } = frameFromAspect(detail?.ratio ?? null);
     const open = (feedback.get(ad.id) ?? []).filter((f) => !f.resolved);
     const approval = approvals.get(ad.id) ?? null;
     const status: PreviewStatus =
@@ -888,8 +846,6 @@ export async function buildPreview(
           creative.call_to_action_type ??
           creative.asset_feed_spec?.call_to_action_types?.[0] ??
           null,
-        frameHeight,
-        aspect,
       },
       status,
       approvedBy: approval?.approvedBy,
