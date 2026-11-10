@@ -21,6 +21,7 @@ function AdPreviewFrame({ ad }: { ad: AdItem }) {
       src={ad.preview.iframeSrc}
       title={ad.adName}
       vertical={ad.preview.vertical}
+      poster={ad.preview.thumbnailUrl}
       nativeWidth={ad.preview.previewWidth}
       nativeHeight={ad.preview.previewHeight}
     />

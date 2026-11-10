@@ -453,7 +453,8 @@ function metricsOf(r: RawInsight): AdMetrics {
 
 async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const creative = await fetchCreative(base.adId).catch(() => ({}) as RawCreative);
-  const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
+  const mediaUrl = mediaImageUrlOf(creative);
+  const ratio = await fetchImageAspect(mediaUrl);
   const { format, size, vertical } = previewFormatFor(ratio);
   const [previewSrc, largeThumb] = await Promise.all([
     fetchPreviewIframe(base.adId, format),
@@ -481,7 +482,10 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       previewWidth: size.width,
       previewHeight: size.height,
       vertical,
-      thumbnailUrl: largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
+      // Vertical ads use the native 9:16 frame as the play poster.
+      thumbnailUrl: vertical
+        ? mediaUrl ?? largeThumb ?? null
+        : largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
       isVideo,
       body,
       title: creative.title ?? creative.object_story_spec?.link_data?.name ?? null,
@@ -895,7 +899,11 @@ export async function buildPreview(
         previewWidth: detail?.size.width ?? FEED_SIZE.width,
         previewHeight: detail?.size.height ?? FEED_SIZE.height,
         vertical: detail?.vertical ?? false,
-        thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null,
+        thumbnailUrl:
+          (detail?.vertical ? mediaImageUrlOf(creative) : null) ??
+          creative.thumbnail_url ??
+          creative.image_url ??
+          null,
         isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
         body: bodyOf(creative),
         title: headlineOf(creative),
