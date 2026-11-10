@@ -21,30 +21,14 @@ import type {
 } from "../../shared/types.js";
 import { MetaError, requireEnv } from "./http.js";
 import { readState } from "./kv.js";
-import { fetchImageAspect } from "./imagesize.js";
 import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
 
-// A 9:16 video is masked to ~4:5 in the feed preview, so for truly vertical
-// media we render the Story preview instead — it shows the full frame.
-const PORTRAIT_MAX_ASPECT = 0.7; // w/h below this is vertical (9:16 = 0.56)
+// Every ad renders as the standard feed preview (including 9:16). The feed card
+// needs 400px wide to show the whole card; we then scale it down to fit.
 const FEED_FORMAT = "MOBILE_FEED_STANDARD";
-const STORY_FORMAT = "FACEBOOK_STORY_MOBILE";
-// Native iframe sizes we render at (then scale down to the card). The feed card
-// needs 400px wide to show the whole card; the Story is a clean 9:16.
 const FEED_SIZE = { width: 400, height: 640 };
-const STORY_SIZE = { width: 360, height: 640 };
-
-function mediaImageUrlOf(c: RawCreative): string | null {
-  return (
-    c.object_story_spec?.video_data?.image_url ??
-    c.object_story_spec?.link_data?.picture ??
-    c.image_url ??
-    c.thumbnail_url ??
-    null
-  );
-}
 
 function version(): string {
   return process.env.META_API_VERSION || "v21.0";
@@ -329,26 +313,19 @@ async function fetchPreviewIframe(
   }
 }
 
-// Some genuinely-vertical uploads come back from Graph with a non-9:16
-// preview image (so aspect detection misses them), but the ad name carries the
-// source dimensions. Per convention here, "1080x1920" in the name means 9:16.
-const NAME_VERTICAL_RE = /1080\s*[x×]\s*1920/i;
-
-/** Pick the preview format + native render size for an ad's media aspect. */
-export function previewFormatFor(
-  ratio: number | null,
-  adName?: string | null,
-): {
+/**
+ * Every ad — including 9:16 — is rendered as the standard Meta feed preview.
+ * The feed preview embeds Meta's own native video player (with play/pause and a
+ * scrubber), so it loads fast and plays smoothly; the full-bleed Story preview
+ * we tried for vertical ads brought autoplay, slow loads and layout jumps, so
+ * we render 9:16 the same way as the other formats.
+ */
+export function previewFormatFor(): {
   format: string;
   size: { width: number; height: number };
   vertical: boolean;
 } {
-  const byAspect = ratio != null && ratio > 0 && ratio < PORTRAIT_MAX_ASPECT;
-  const byName = adName != null && NAME_VERTICAL_RE.test(adName);
-  const vertical = byAspect || byName;
-  return vertical
-    ? { format: STORY_FORMAT, size: STORY_SIZE, vertical: true }
-    : { format: FEED_FORMAT, size: FEED_SIZE, vertical: false };
+  return { format: FEED_FORMAT, size: FEED_SIZE, vertical: false };
 }
 
 /** Small thumbnail straight off the ad's creative — used for overview tiles. */
@@ -358,20 +335,6 @@ async function fetchSmallThumb(adId: string): Promise<string | null> {
       fields: "creative{thumbnail_url}",
     });
     return data.creative?.thumbnail_url ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Direct, progressively-downloadable video URL for native inline playback.
- * We use this (not Meta's slow Story preview iframe) for 9:16 videos so they
- * load fast, play smoothly and pause for real.
- */
-async function fetchVideoSource(videoId: string): Promise<string | null> {
-  try {
-    const data = await graphGet<{ source?: string }>(videoId, { fields: "source" });
-    return data.source ?? null;
   } catch {
     return null;
   }
@@ -481,21 +444,12 @@ function metricsOf(r: RawInsight): AdMetrics {
 
 async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const creative = await fetchCreative(base.adId).catch(() => ({}) as RawCreative);
-  const mediaUrl = mediaImageUrlOf(creative);
-  const ratio = await fetchImageAspect(mediaUrl);
-  const { format, size, vertical } = previewFormatFor(ratio, base.adName);
+  const { format, size, vertical } = previewFormatFor();
   const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
-  const [previewSrc, largeThumb, videoUrl] = await Promise.all([
+  const [previewSrc, largeThumb] = await Promise.all([
     fetchPreviewIframe(base.adId, format),
-    // 9:16 poster for vertical, 4:5 otherwise — Meta's representative frame
-    // (not the raw first frame, which is often black).
-    creative.id
-      ? fetchLargeThumb(creative.id, vertical ? 720 : 1080, vertical ? 1280 : 1350)
-      : Promise.resolve(null),
-    // Direct video URL for native inline 9:16 playback.
-    vertical && isVideo && creative.video_id
-      ? fetchVideoSource(creative.video_id)
-      : Promise.resolve(null),
+    // Representative 4:5 frame (not the raw first frame, which is often black).
+    creative.id ? fetchLargeThumb(creative.id, 1080, 1350) : Promise.resolve(null),
   ]);
   const body = bodyOf(creative);
   const mismatchCity = copyCheck(base.adName, body);
@@ -518,10 +472,8 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       previewWidth: size.width,
       previewHeight: size.height,
       vertical,
-      thumbnailUrl: vertical
-        ? largeThumb ?? mediaUrl ?? null
-        : largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
-      videoUrl,
+      thumbnailUrl: largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
+      videoUrl: null,
       isVideo,
       body,
       title: creative.title ?? creative.object_story_spec?.link_data?.name ?? null,
@@ -885,35 +837,21 @@ export async function buildPreview(
       iframe: string | null;
       size: { width: number; height: number };
       vertical: boolean;
-      poster: string | null;
-      videoUrl: string | null;
     }
   >();
   if (withPreviews) {
     const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
       const creative = await fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative);
-      const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
-      const { format, size, vertical } = previewFormatFor(ratio, ad.name);
-      const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
-      const [iframe, poster, videoUrl] = await Promise.all([
-        fetchPreviewIframe(ad.id, format),
-        // 9:16 poster (Meta's representative frame) for the play button.
-        vertical && creative.id ? fetchLargeThumb(creative.id, 720, 1280) : Promise.resolve(null),
-        // Direct video URL for native inline 9:16 playback.
-        vertical && isVideo && creative.video_id
-          ? fetchVideoSource(creative.video_id)
-          : Promise.resolve(null),
-      ]);
-      return { id: ad.id, creative, iframe, size, vertical, poster, videoUrl };
+      const { format, size, vertical } = previewFormatFor();
+      const iframe = await fetchPreviewIframe(ad.id, format);
+      return { id: ad.id, creative, iframe, size, vertical };
     });
     for (const d of details)
       detailByAd.set(d.id, {
         creative: d.creative,
         iframe: d.iframe,
         size: d.size,
-        poster: d.poster,
         vertical: d.vertical,
-        videoUrl: d.videoUrl,
       });
   }
 
@@ -948,12 +886,8 @@ export async function buildPreview(
         previewWidth: detail?.size.width ?? FEED_SIZE.width,
         previewHeight: detail?.size.height ?? FEED_SIZE.height,
         vertical: detail?.vertical ?? false,
-        thumbnailUrl:
-          (detail?.vertical ? detail.poster ?? mediaImageUrlOf(creative) : null) ??
-          creative.thumbnail_url ??
-          creative.image_url ??
-          null,
-        videoUrl: detail?.videoUrl ?? null,
+        thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null,
+        videoUrl: null,
         isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
         body: bodyOf(creative),
         title: headlineOf(creative),
