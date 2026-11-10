@@ -26,6 +26,9 @@ export function isRange(value: unknown): value is Range {
 export interface AdPreview {
   /** Extracted <iframe src> from the Graph `previews` edge, or null if it failed. */
   iframeSrc: string | null;
+  /** Native iframe size to render at (feed = 400×640, vertical Story = 360×640). */
+  previewWidth: number;
+  previewHeight: number;
   /** Large thumbnail (1080×1350 when available) used as poster/fallback. */
   thumbnailUrl: string | null;
   isVideo: boolean;
@@ -179,6 +182,8 @@ export interface PreviewAd {
   displayName: string;
   preview: {
     iframeSrc: string | null;
+    previewWidth: number;
+    previewHeight: number;
     thumbnailUrl: string | null;
     isVideo: boolean;
     body: string | null;

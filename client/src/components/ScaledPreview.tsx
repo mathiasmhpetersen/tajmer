@@ -1,19 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-// The Meta MOBILE_FEED_STANDARD preview needs ~400px of width to show the whole
-// card (close X, CTA, like/comment/share). We render the iframe at a fixed
-// native 400×640 and scale the wrapper down to the card width — never up.
-export const PREVIEW_NATIVE_WIDTH = 400;
-export const PREVIEW_NATIVE_HEIGHT = 640;
+// The Meta preview is rendered at its native size (feed card = 400×640, vertical
+// Story = 360×640) and the wrapper is scaled down to the card width — never up —
+// so the whole ad is visible and nothing is cropped.
+const DEFAULT_WIDTH = 400;
+const DEFAULT_HEIGHT = 640;
 
 export function ScaledPreview({
   src,
   title,
+  nativeWidth = DEFAULT_WIDTH,
+  nativeHeight = DEFAULT_HEIGHT,
   className,
 }: {
   src: string;
   title: string;
+  nativeWidth?: number;
+  nativeHeight?: number;
   className?: string;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -25,7 +29,7 @@ export function ScaledPreview({
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       const w = entries[0].contentRect.width;
-      if (w > 0) setScale(Math.min(1, w / PREVIEW_NATIVE_WIDTH));
+      if (w > 0) setScale(Math.min(1, w / nativeWidth));
     });
     ro.observe(el);
     const io = new IntersectionObserver(
@@ -42,31 +46,24 @@ export function ScaledPreview({
       ro.disconnect();
       io.disconnect();
     };
-  }, []);
+  }, [nativeWidth]);
 
   return (
     <div
       ref={boxRef}
-      className={cn(
-        "relative mx-auto w-full max-w-[400px] overflow-hidden rounded-xl bg-white",
-        className,
-      )}
-      style={{ aspectRatio: `${PREVIEW_NATIVE_WIDTH} / ${PREVIEW_NATIVE_HEIGHT}` }}
+      className={cn("relative mx-auto w-full overflow-hidden rounded-xl bg-white", className)}
+      style={{ maxWidth: nativeWidth, aspectRatio: `${nativeWidth} / ${nativeHeight}` }}
     >
       {inView ? (
         <div
           className="absolute left-0 top-0 origin-top-left"
-          style={{
-            width: PREVIEW_NATIVE_WIDTH,
-            height: PREVIEW_NATIVE_HEIGHT,
-            transform: `scale(${scale})`,
-          }}
+          style={{ width: nativeWidth, height: nativeHeight, transform: `scale(${scale})` }}
         >
           <iframe
             title={title}
             src={src}
-            width={PREVIEW_NATIVE_WIDTH}
-            height={PREVIEW_NATIVE_HEIGHT}
+            width={nativeWidth}
+            height={nativeHeight}
             scrolling="no"
             loading="lazy"
             allow="autoplay; encrypted-media"
