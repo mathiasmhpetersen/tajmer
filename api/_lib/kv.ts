@@ -1,26 +1,60 @@
 import { Redis } from "@upstash/redis";
 import type { PreviewFeedbackItem, Role } from "../../shared/types.js";
 
+/** env var names that look KV/Redis-related, for diagnostics (names only). */
+function kvEnvNames(): string[] {
+  return Object.keys(process.env).filter((k) => /KV|UPSTASH|REDIS/i.test(k));
+}
+
 /** Thrown when a write is attempted but no KV/Redis is configured yet. */
 export class KVError extends Error {
-  constructor(message = "Lager (KV) er ikke konfigureret på serveren") {
-    super(message);
+  constructor(message?: string) {
+    const names = kvEnvNames();
+    super(
+      message ??
+        `Lager (KV) er ikke konfigureret på serveren${
+          names.length ? ` (fundne env-navne: ${names.join(", ")})` : ""
+        }`,
+    );
     this.name = "KVError";
   }
 }
 
+/**
+ * Resolve Upstash REST credentials from whatever names Vercel provisioned. Tries
+ * the well-known pairs first, then any `*REST_API_URL`/`*REST_API_TOKEN` (or
+ * `*REDIS_REST_URL`/`_TOKEN`) pair — the marketplace integration can use a
+ * custom prefix.
+ */
+function resolveCreds(): { url: string; token: string } | null {
+  const known: [string, string][] = [
+    ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
+    ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+  ];
+  for (const [u, t] of known) {
+    if (process.env[u] && process.env[t]) {
+      return { url: process.env[u]!, token: process.env[t]! };
+    }
+  }
+  const urlKey = Object.keys(process.env).find(
+    (k) => /(REST_API_URL|REDIS_REST_URL)$/.test(k) && process.env[k]?.startsWith("https"),
+  );
+  if (urlKey) {
+    const tokenKey = urlKey.replace(/URL$/, "TOKEN");
+    if (process.env[tokenKey]) {
+      return { url: process.env[urlKey]!, token: process.env[tokenKey]! };
+    }
+  }
+  return null;
+}
+
 let cached: Redis | null | undefined;
 
-/**
- * Reads whichever credential pair Vercel provisioned — the Vercel KV names
- * (`KV_REST_API_*`) or the Upstash marketplace names (`UPSTASH_REDIS_REST_*`).
- * Returns null when neither is set so reads can degrade gracefully.
- */
+/** Upstash Redis client, or null when no credentials are configured. */
 function kv(): Redis | null {
   if (cached !== undefined) return cached;
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  cached = url && token ? new Redis({ url, token }) : null;
+  const creds = resolveCreds();
+  cached = creds ? new Redis(creds) : null;
   return cached;
 }
 
