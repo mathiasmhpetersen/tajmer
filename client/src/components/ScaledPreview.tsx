@@ -36,6 +36,9 @@ export function ScaledPreview({
   // can't prevent — so for those we show a poster + play button and only mount
   // the live iframe once the user clicks.
   const [playing, setPlaying] = useState(false);
+  // The Story iframe takes ~2s to render; keep the poster underneath and fade
+  // the iframe in on load so there's no gray flash.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -105,8 +108,15 @@ export function ScaledPreview({
         skeleton
       ) : playing ? (
         <>
+          {/* Poster stays behind the iframe until it has loaded — no gray flash. */}
+          {poster && (
+            <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          )}
           <div
-            className="absolute left-0 top-0 origin-top-left"
+            className={cn(
+              "absolute left-0 top-0 origin-top-left transition-opacity duration-300 motion-reduce:transition-none",
+              loaded ? "opacity-100" : "opacity-0",
+            )}
             style={{ width: nativeWidth, height: nativeHeight, transform: `scale(${scale})` }}
           >
             <iframe
@@ -116,12 +126,16 @@ export function ScaledPreview({
               height={nativeHeight}
               scrolling="no"
               allow={IFRAME_ALLOW}
+              onLoad={() => setLoaded(true)}
               className="block border-0"
             />
           </div>
           <button
             type="button"
-            onClick={() => setPlaying(false)}
+            onClick={() => {
+              setPlaying(false);
+              setLoaded(false);
+            }}
             aria-label="Pause"
             className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform hover:scale-105 motion-reduce:transition-none"
           >
@@ -131,7 +145,10 @@ export function ScaledPreview({
       ) : (
         <button
           type="button"
-          onClick={() => setPlaying(true)}
+          onClick={() => {
+            setLoaded(false);
+            setPlaying(true);
+          }}
           aria-label="Afspil"
           className="group absolute inset-0 flex items-center justify-center"
         >
