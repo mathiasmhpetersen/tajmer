@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 // Feed cards (4:5 / 1:1 / 16:9) are responsive, so we let the iframe fill the
@@ -90,30 +90,44 @@ export function ScaledPreview({
   }
 
   // Vertical 9:16 Story: poster + play button until clicked, then the native
-  // 360×640 iframe scaled down to the card, centered.
+  // 360×640 iframe scaled down to the card, with a pause button that unmounts
+  // it (Meta's player has no controllable pause, so pause returns to the poster).
   return (
     <div
       ref={boxRef}
-      className={cn("relative mx-auto w-full overflow-hidden rounded-xl bg-black", className)}
+      className={cn(
+        "relative mx-auto w-full overflow-hidden rounded-xl bg-neutral-200",
+        className,
+      )}
       style={{ maxWidth: nativeWidth, aspectRatio: `${nativeWidth} / ${nativeHeight}` }}
     >
       {!inView ? (
         skeleton
       ) : playing ? (
-        <div
-          className="absolute left-0 top-0 origin-top-left"
-          style={{ width: nativeWidth, height: nativeHeight, transform: `scale(${scale})` }}
-        >
-          <iframe
-            title={title}
-            src={src}
-            width={nativeWidth}
-            height={nativeHeight}
-            scrolling="no"
-            allow={IFRAME_ALLOW}
-            className="block border-0"
-          />
-        </div>
+        <>
+          <div
+            className="absolute left-0 top-0 origin-top-left"
+            style={{ width: nativeWidth, height: nativeHeight, transform: `scale(${scale})` }}
+          >
+            <iframe
+              title={title}
+              src={src}
+              width={nativeWidth}
+              height={nativeHeight}
+              scrolling="no"
+              allow={IFRAME_ALLOW}
+              className="block border-0"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setPlaying(false)}
+            aria-label="Pause"
+            className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform hover:scale-105 motion-reduce:transition-none"
+          >
+            <Pause className="size-4 fill-white" />
+          </button>
+        </>
       ) : (
         <button
           type="button"
