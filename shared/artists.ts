@@ -5,8 +5,6 @@ export interface Artist {
   slug: string;
   name: string;
   match: string[];
-  /** Google Sheet id of this artist's ticket-sales sheet (PR3). */
-  ticketSheetId?: string;
 }
 
 export const ARTISTS: Artist[] = [
