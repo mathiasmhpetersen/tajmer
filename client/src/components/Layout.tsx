@@ -2,15 +2,18 @@ import { Link, useLocation } from "wouter";
 import { Mic2 } from "lucide-react";
 import { ARTISTS } from "@shared/artists";
 import { cn } from "@/lib/cn";
+import { useIsClient } from "@/lib/session";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
 
 /** Mobile: the sidebar collapses to a top bar with a scrolling chip row. */
 function MobileBar() {
   const [location] = useLocation();
+  const isClient = useIsClient();
   const items = [
     { slug: "", name: "Oversigt" },
     { slug: "preview", name: "Preview" },
+    ...(isClient ? [] : [{ slug: "budget", name: "Budget" }]),
     ...ARTISTS,
   ];
   return (

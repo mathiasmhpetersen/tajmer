@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Eye, LayoutGrid, Mic2 } from "lucide-react";
+import { Eye, LayoutGrid, Mic2, Wallet } from "lucide-react";
 import { ARTISTS } from "@shared/artists";
 import { cn } from "@/lib/cn";
 import { useIsClient } from "@/lib/session";
@@ -74,6 +74,15 @@ export function Sidebar() {
               <Eye className="size-[18px]" />
               <span>Preview</span>
             </NavItem>
+            {!isClient && (
+              <NavItem
+                href="/budget"
+                active={location === "/budget" || location.startsWith("/budget/")}
+              >
+                <Wallet className="size-[18px]" />
+                <span>Budget</span>
+              </NavItem>
+            )}
           </div>
         </nav>
 
