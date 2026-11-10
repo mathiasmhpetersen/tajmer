@@ -35,11 +35,11 @@ export function ArtistGridSkeleton() {
 
 export function AdGridSkeleton({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-6">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="flex flex-col gap-2.5">
           <Skeleton className="h-4 w-40" />
-          <Skeleton className="mx-auto h-[620px] w-full max-w-[335px] rounded-tile" />
+          <Skeleton className="aspect-[400/640] w-full rounded-tile" />
           <Skeleton className="h-4 w-48" />
           <Skeleton className="h-8 w-full" />
         </div>

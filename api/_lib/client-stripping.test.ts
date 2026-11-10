@@ -20,6 +20,7 @@ function makeAd(): AdItem {
       iframeSrc: "https://www.facebook.com/plugins/x",
       previewWidth: 400,
       previewHeight: 640,
+      vertical: false,
       thumbnailUrl: null,
       isVideo: true,
       body: "hej",

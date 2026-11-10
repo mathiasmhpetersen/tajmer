@@ -373,6 +373,7 @@ function ClientAdCard({
         <ScaledPreview
           src={ad.preview.iframeSrc}
           title={ad.adName}
+          vertical={ad.preview.vertical}
           nativeWidth={ad.preview.previewWidth}
           nativeHeight={ad.preview.previewHeight}
         />

@@ -329,11 +329,12 @@ async function fetchPreviewIframe(
 function previewFormatFor(ratio: number | null): {
   format: string;
   size: { width: number; height: number };
+  vertical: boolean;
 } {
   const vertical = ratio != null && ratio > 0 && ratio < PORTRAIT_MAX_ASPECT;
   return vertical
-    ? { format: STORY_FORMAT, size: STORY_SIZE }
-    : { format: FEED_FORMAT, size: FEED_SIZE };
+    ? { format: STORY_FORMAT, size: STORY_SIZE, vertical: true }
+    : { format: FEED_FORMAT, size: FEED_SIZE, vertical: false };
 }
 
 /** Small thumbnail straight off the ad's creative — used for overview tiles. */
@@ -453,7 +454,7 @@ function metricsOf(r: RawInsight): AdMetrics {
 async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const creative = await fetchCreative(base.adId).catch(() => ({}) as RawCreative);
   const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
-  const { format, size } = previewFormatFor(ratio);
+  const { format, size, vertical } = previewFormatFor(ratio);
   const [previewSrc, largeThumb] = await Promise.all([
     fetchPreviewIframe(base.adId, format),
     creative.id ? fetchLargeThumb(creative.id) : Promise.resolve(null),
@@ -479,6 +480,7 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       iframeSrc: previewSrc,
       previewWidth: size.width,
       previewHeight: size.height,
+      vertical,
       thumbnailUrl: largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
       isVideo,
       body,
@@ -838,18 +840,28 @@ export async function buildPreview(
   // only for qualifying ads, and skipped entirely for the agent endpoint.
   const detailByAd = new Map<
     string,
-    { creative: RawCreative; iframe: string | null; size: { width: number; height: number } }
+    {
+      creative: RawCreative;
+      iframe: string | null;
+      size: { width: number; height: number };
+      vertical: boolean;
+    }
   >();
   if (withPreviews) {
     const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
       const creative = await fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative);
       const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
-      const { format, size } = previewFormatFor(ratio);
+      const { format, size, vertical } = previewFormatFor(ratio);
       const iframe = await fetchPreviewIframe(ad.id, format);
-      return { id: ad.id, creative, iframe, size };
+      return { id: ad.id, creative, iframe, size, vertical };
     });
     for (const d of details)
-      detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe, size: d.size });
+      detailByAd.set(d.id, {
+        creative: d.creative,
+        iframe: d.iframe,
+        size: d.size,
+        vertical: d.vertical,
+      });
   }
 
   const { approvals, feedback } = await readState(
@@ -882,6 +894,7 @@ export async function buildPreview(
         iframeSrc: detail?.iframe ?? null,
         previewWidth: detail?.size.width ?? FEED_SIZE.width,
         previewHeight: detail?.size.height ?? FEED_SIZE.height,
+        vertical: detail?.vertical ?? false,
         thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null,
         isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
         body: bodyOf(creative),

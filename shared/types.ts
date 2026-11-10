@@ -29,6 +29,8 @@ export interface AdPreview {
   /** Native iframe size to render at (feed = 400×640, vertical Story = 360×640). */
   previewWidth: number;
   previewHeight: number;
+  /** 9:16 Story preview — scaled & centered; feed cards instead fill the card. */
+  vertical: boolean;
   /** Large thumbnail (1080×1350 when available) used as poster/fallback. */
   thumbnailUrl: string | null;
   isVideo: boolean;
@@ -184,6 +186,7 @@ export interface PreviewAd {
     iframeSrc: string | null;
     previewWidth: number;
     previewHeight: number;
+    vertical: boolean;
     thumbnailUrl: string | null;
     isVideo: boolean;
     body: string | null;
