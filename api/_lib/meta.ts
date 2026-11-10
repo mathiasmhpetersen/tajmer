@@ -25,10 +25,12 @@ import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
 
-// Every ad renders as the standard feed preview (including 9:16). The feed card
-// needs 400px wide to show the whole card; we then scale it down to fit.
+// Every ad renders as the standard feed preview (including 9:16). We render the
+// iframe at its native 400px width — where the whole card (header, text, video,
+// link card, reactions) lays out at ~660px tall — then scale it down to fit the
+// column, so nothing is ever clipped.
 const FEED_FORMAT = "MOBILE_FEED_STANDARD";
-const FEED_SIZE = { width: 400, height: 640 };
+const FEED_SIZE = { width: 400, height: 660 };
 
 function version(): string {
   return process.env.META_API_VERSION || "v21.0";
