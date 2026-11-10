@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-// The feed preview is a fixed-layout card (~400×660). We render the iframe at
-// that native size and scale the wrapper down to the column width — never up —
-// so the whole card (header, text, video, link card, reactions) is always
-// visible and never clipped.
-const DEFAULT_WIDTH = 400;
-const DEFAULT_HEIGHT = 660;
+// The feed preview renders at Meta's native 335px feed width (full size), and we
+// scale the wrapper down to the column width only when it's narrower — never up.
+const DEFAULT_WIDTH = 335;
+const DEFAULT_HEIGHT = 620;
 // autoplay is intentionally omitted so videos don't play automatically — the
 // browser then shows Meta's play button.
 const IFRAME_ALLOW = "encrypted-media";
