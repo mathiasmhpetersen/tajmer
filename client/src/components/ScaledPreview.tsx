@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 // Feed cards (4:5 / 1:1 / 16:9) are responsive, so we let the iframe fill the
@@ -15,6 +16,7 @@ export function ScaledPreview({
   src,
   title,
   vertical = false,
+  poster,
   nativeWidth = DEFAULT_WIDTH,
   nativeHeight = DEFAULT_HEIGHT,
   className,
@@ -22,6 +24,7 @@ export function ScaledPreview({
   src: string;
   title: string;
   vertical?: boolean;
+  poster?: string | null;
   nativeWidth?: number;
   nativeHeight?: number;
   className?: string;
@@ -29,6 +32,10 @@ export function ScaledPreview({
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [inView, setInView] = useState(false);
+  // Vertical Story previews auto-play (muted) on load, which an iframe `allow`
+  // can't prevent — so for those we show a poster + play button and only mount
+  // the live iframe once the user clicks.
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -82,14 +89,17 @@ export function ScaledPreview({
     );
   }
 
-  // Vertical 9:16 Story: native 360×640 scaled down to the card, centered.
+  // Vertical 9:16 Story: poster + play button until clicked, then the native
+  // 360×640 iframe scaled down to the card, centered.
   return (
     <div
       ref={boxRef}
-      className={cn("relative mx-auto w-full overflow-hidden rounded-xl bg-white", className)}
+      className={cn("relative mx-auto w-full overflow-hidden rounded-xl bg-black", className)}
       style={{ maxWidth: nativeWidth, aspectRatio: `${nativeWidth} / ${nativeHeight}` }}
     >
-      {inView ? (
+      {!inView ? (
+        skeleton
+      ) : playing ? (
         <div
           className="absolute left-0 top-0 origin-top-left"
           style={{ width: nativeWidth, height: nativeHeight, transform: `scale(${scale})` }}
@@ -100,13 +110,24 @@ export function ScaledPreview({
             width={nativeWidth}
             height={nativeHeight}
             scrolling="no"
-            loading="lazy"
             allow={IFRAME_ALLOW}
             className="block border-0"
           />
         </div>
       ) : (
-        skeleton
+        <button
+          type="button"
+          onClick={() => setPlaying(true)}
+          aria-label="Afspil"
+          className="group absolute inset-0 flex items-center justify-center"
+        >
+          {poster && (
+            <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          )}
+          <span className="relative flex size-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm transition-transform group-hover:scale-105 motion-reduce:transition-none">
+            <Play className="size-7 translate-x-0.5 fill-white text-white" />
+          </span>
+        </button>
       )}
     </div>
   );
