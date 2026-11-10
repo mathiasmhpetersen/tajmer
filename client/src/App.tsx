@@ -14,6 +14,8 @@ import { Layout } from "@/components/Layout";
 import { Overview } from "@/pages/Overview";
 import { ArtistPage } from "@/pages/ArtistPage";
 import { ClientPreview } from "@/pages/ClientPreview";
+import { BudgetOverview } from "@/pages/BudgetOverview";
+import { BudgetArtist } from "@/pages/BudgetArtist";
 import { Login } from "@/pages/Login";
 
 const FIVE_MIN = 5 * 60 * 1000;
@@ -89,6 +91,14 @@ function Gate({
             roles (admin additionally gets resolve + Ads Manager). */}
         <Route path="/preview" component={ClientPreview} />
         <Route path="/">{() => <Layout><Overview /></Layout>}</Route>
+        <Route path="/budget">{() => <Layout><BudgetOverview /></Layout>}</Route>
+        <Route path="/budget/:slug">
+          {(params) => (
+            <Layout>
+              <BudgetArtist slug={params.slug} />
+            </Layout>
+          )}
+        </Route>
         <Route path="/:slug">
           {(params) => (
             <Layout>

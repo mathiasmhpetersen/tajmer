@@ -9,6 +9,7 @@ import type {
   Role,
   Session,
 } from "@shared/types";
+import type { ArtistBudget, BudgetOverviewResponse } from "@shared/budget";
 
 /** Thrown on a 401 so React Query can route the app to the login screen. */
 export class UnauthorizedError extends Error {
@@ -57,6 +58,16 @@ export function fetchSession(): Promise<Session> {
 
 export function fetchPreview(): Promise<PreviewResponse> {
   return getJson<PreviewResponse>("/api/preview");
+}
+
+export function fetchBudgetOverview(nocache = false): Promise<BudgetOverviewResponse> {
+  return getJson<BudgetOverviewResponse>(`/api/budget/overview${nocache ? "?nocache=1" : ""}`);
+}
+
+export function fetchArtistBudget(slug: string, nocache = false): Promise<ArtistBudget> {
+  return getJson<ArtistBudget>(
+    `/api/budget/artist/${encodeURIComponent(slug)}${nocache ? "?nocache=1" : ""}`,
+  );
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {

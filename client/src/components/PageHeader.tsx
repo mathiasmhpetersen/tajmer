@@ -4,7 +4,7 @@ export function PageHeader({
   meta,
   actions,
 }: {
-  dateline: string;
+  dateline: React.ReactNode;
   title: React.ReactNode;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
