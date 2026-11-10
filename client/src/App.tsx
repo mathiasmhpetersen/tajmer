@@ -13,7 +13,6 @@ import { RoleProvider } from "@/lib/session";
 import { Layout } from "@/components/Layout";
 import { Overview } from "@/pages/Overview";
 import { ArtistPage } from "@/pages/ArtistPage";
-import { Preview } from "@/pages/Preview";
 import { ClientPreview } from "@/pages/ClientPreview";
 import { Login } from "@/pages/Login";
 
@@ -83,15 +82,12 @@ function Gate({
     );
   }
 
-  const isClient = session.data.role === "client";
-
   return (
     <RoleProvider role={session.data.role}>
       <Switch>
-        {/* The client review experience is its own light, sidebar-less layout. */}
-        <Route path="/preview">
-          {() => (isClient ? <ClientPreview /> : <Layout><Preview /></Layout>)}
-        </Route>
+        {/* Preview is the same light, sidebar-less review experience for both
+            roles (admin additionally gets resolve + Ads Manager). */}
+        <Route path="/preview" component={ClientPreview} />
         <Route path="/">{() => <Layout><Overview /></Layout>}</Route>
         <Route path="/:slug">
           {(params) => (
