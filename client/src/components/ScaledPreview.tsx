@@ -17,6 +17,7 @@ export function ScaledPreview({
   title,
   vertical = false,
   poster,
+  videoUrl,
   nativeWidth = DEFAULT_WIDTH,
   nativeHeight = DEFAULT_HEIGHT,
   className,
@@ -25,11 +26,13 @@ export function ScaledPreview({
   title: string;
   vertical?: boolean;
   poster?: string | null;
+  videoUrl?: string | null;
   nativeWidth?: number;
   nativeHeight?: number;
   className?: string;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [scale, setScale] = useState(1);
   const [inView, setInView] = useState(false);
   // Vertical Story previews auto-play (muted) on load, which an iframe `allow`
@@ -92,9 +95,64 @@ export function ScaledPreview({
     );
   }
 
-  // Vertical 9:16 Story: poster + play button until clicked, then the native
-  // 360×640 iframe scaled down to the card, with a pause button that unmounts
-  // it (Meta's player has no controllable pause, so pause returns to the poster).
+  // Vertical 9:16 with a direct video URL: play it natively in-place (like the
+  // reference tools do) — the thumbnail is the <video> poster, so it shows
+  // instantly, streams fast, and pauses for real. No Story iframe, no "jump".
+  if (videoUrl) {
+    return (
+      <div
+        ref={boxRef}
+        className={cn(
+          "relative mx-auto w-full overflow-hidden rounded-xl bg-black",
+          className,
+        )}
+        style={{ maxWidth: nativeWidth, aspectRatio: `${nativeWidth} / ${nativeHeight}` }}
+      >
+        {inView ? (
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            poster={poster ?? undefined}
+            playsInline
+            preload="metadata"
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          skeleton
+        )}
+        {inView && !playing && (
+          <button
+            type="button"
+            onClick={() => videoRef.current?.play()}
+            aria-label="Afspil"
+            className="group absolute inset-0 flex items-center justify-center"
+          >
+            <span className="relative flex size-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm transition-transform group-hover:scale-105 motion-reduce:transition-none">
+              <Play className="size-7 translate-x-0.5 fill-white text-white" />
+            </span>
+          </button>
+        )}
+        {inView && playing && (
+          <button
+            type="button"
+            onClick={() => videoRef.current?.pause()}
+            aria-label="Pause"
+            className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform hover:scale-105 motion-reduce:transition-none"
+          >
+            <Pause className="size-4 fill-white" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Vertical 9:16 Story (no direct video, e.g. image ads): poster + play button
+  // until clicked, then the native 360×640 iframe scaled down to the card, with
+  // a pause button that unmounts it (Meta's player can't be paused directly, so
+  // pause returns to the poster).
   return (
     <div
       ref={boxRef}

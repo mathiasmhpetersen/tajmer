@@ -22,6 +22,7 @@ function makeAd(): AdItem {
       previewHeight: 640,
       vertical: false,
       thumbnailUrl: null,
+      videoUrl: null,
       isVideo: true,
       body: "hej",
       title: "t",
