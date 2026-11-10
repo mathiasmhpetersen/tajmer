@@ -23,6 +23,9 @@ export function isRange(value: unknown): value is Range {
   return value === "today" || value === "yesterday" || value === "last_7d";
 }
 
+/** portrait = 9:16-ish (shown taller, grouped separately), standard = everything else. */
+export type MediaAspect = "portrait" | "standard";
+
 export interface AdPreview {
   /** Extracted <iframe src> from the Graph `previews` edge, or null if it failed. */
   iframeSrc: string | null;
@@ -32,6 +35,9 @@ export interface AdPreview {
   body: string | null;
   title: string | null;
   ctaType: string | null;
+  /** Rendered feed-card height (px at 335 wide) computed from the media aspect. */
+  frameHeight: number;
+  aspect: MediaAspect;
 }
 
 export interface AdFlags {
@@ -150,6 +156,8 @@ export interface PreviewAd {
     title: string | null;
     description: string | null;
     ctaType: string | null;
+    frameHeight: number;
+    aspect: MediaAspect;
   };
   status: PreviewStatus;
   approvedBy?: Role;

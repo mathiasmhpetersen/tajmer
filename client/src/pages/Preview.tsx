@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/preview/ConfirmButton";
 import { PreviewAdCard } from "@/components/preview/PreviewAdCard";
+import { AdFormatGroups } from "@/components/AdFormatGroups";
 import { AdGridSkeleton } from "@/components/Skeletons";
 import { EmptyState, ErrorState } from "@/components/States";
 
@@ -114,18 +115,20 @@ export function Preview() {
                 {group.campaigns.map((campaign) => (
                   <div key={campaign.campaignId} className="mb-8 last:mb-0">
                     <h3 className="mb-4 text-sm font-medium text-muted">{campaign.displayName}</h3>
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
-                      {campaign.ads.map((ad) => (
+                    <AdFormatGroups
+                      items={campaign.ads}
+                      getAspect={(ad) => ad.preview.aspect}
+                      getKey={(ad) => ad.adId}
+                      render={(ad) => (
                         <PreviewAdCard
-                          key={ad.adId}
                           ad={ad}
                           isClient={isClient}
                           onApprove={onApprove}
                           onFeedback={onFeedback}
                           onResolve={onResolve}
                         />
-                      ))}
-                    </div>
+                      )}
+                    />
                   </div>
                 ))}
               </section>
