@@ -293,12 +293,16 @@ async function fetchCreative(adId: string): Promise<RawCreative> {
   return data.creative ?? {};
 }
 
-async function fetchLargeThumb(creativeId: string): Promise<string | null> {
+async function fetchLargeThumb(
+  creativeId: string,
+  width = 1080,
+  height = 1350,
+): Promise<string | null> {
   try {
     const data = await graphGet<{ thumbnail_url?: string }>(creativeId, {
       fields: "thumbnail_url",
-      thumbnail_width: "1080",
-      thumbnail_height: "1350",
+      thumbnail_width: String(width),
+      thumbnail_height: String(height),
     });
     return data.thumbnail_url ?? null;
   } catch {
@@ -325,13 +329,23 @@ async function fetchPreviewIframe(
   }
 }
 
+// Some genuinely-vertical uploads come back from Graph with a non-9:16
+// preview image (so aspect detection misses them), but the ad name carries the
+// source dimensions. Per convention here, "1080x1920" in the name means 9:16.
+const NAME_VERTICAL_RE = /1080\s*[x×]\s*1920/i;
+
 /** Pick the preview format + native render size for an ad's media aspect. */
-function previewFormatFor(ratio: number | null): {
+export function previewFormatFor(
+  ratio: number | null,
+  adName?: string | null,
+): {
   format: string;
   size: { width: number; height: number };
   vertical: boolean;
 } {
-  const vertical = ratio != null && ratio > 0 && ratio < PORTRAIT_MAX_ASPECT;
+  const byAspect = ratio != null && ratio > 0 && ratio < PORTRAIT_MAX_ASPECT;
+  const byName = adName != null && NAME_VERTICAL_RE.test(adName);
+  const vertical = byAspect || byName;
   return vertical
     ? { format: STORY_FORMAT, size: STORY_SIZE, vertical: true }
     : { format: FEED_FORMAT, size: FEED_SIZE, vertical: false };
@@ -455,10 +469,14 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const creative = await fetchCreative(base.adId).catch(() => ({}) as RawCreative);
   const mediaUrl = mediaImageUrlOf(creative);
   const ratio = await fetchImageAspect(mediaUrl);
-  const { format, size, vertical } = previewFormatFor(ratio);
+  const { format, size, vertical } = previewFormatFor(ratio, base.adName);
   const [previewSrc, largeThumb] = await Promise.all([
     fetchPreviewIframe(base.adId, format),
-    creative.id ? fetchLargeThumb(creative.id) : Promise.resolve(null),
+    // 9:16 poster for vertical, 4:5 otherwise — Meta's representative frame
+    // (not the raw first frame, which is often black).
+    creative.id
+      ? fetchLargeThumb(creative.id, vertical ? 720 : 1080, vertical ? 1280 : 1350)
+      : Promise.resolve(null),
   ]);
   const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
   const body = bodyOf(creative);
@@ -482,9 +500,8 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       previewWidth: size.width,
       previewHeight: size.height,
       vertical,
-      // Vertical ads use the native 9:16 frame as the play poster.
       thumbnailUrl: vertical
-        ? mediaUrl ?? largeThumb ?? null
+        ? largeThumb ?? mediaUrl ?? null
         : largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
       isVideo,
       body,
@@ -849,21 +866,27 @@ export async function buildPreview(
       iframe: string | null;
       size: { width: number; height: number };
       vertical: boolean;
+      poster: string | null;
     }
   >();
   if (withPreviews) {
     const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
       const creative = await fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative);
       const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
-      const { format, size, vertical } = previewFormatFor(ratio);
-      const iframe = await fetchPreviewIframe(ad.id, format);
-      return { id: ad.id, creative, iframe, size, vertical };
+      const { format, size, vertical } = previewFormatFor(ratio, ad.name);
+      const [iframe, poster] = await Promise.all([
+        fetchPreviewIframe(ad.id, format),
+        // 9:16 poster (Meta's representative frame) for the play button.
+        vertical && creative.id ? fetchLargeThumb(creative.id, 720, 1280) : Promise.resolve(null),
+      ]);
+      return { id: ad.id, creative, iframe, size, vertical, poster };
     });
     for (const d of details)
       detailByAd.set(d.id, {
         creative: d.creative,
         iframe: d.iframe,
         size: d.size,
+        poster: d.poster,
         vertical: d.vertical,
       });
   }
@@ -900,7 +923,7 @@ export async function buildPreview(
         previewHeight: detail?.size.height ?? FEED_SIZE.height,
         vertical: detail?.vertical ?? false,
         thumbnailUrl:
-          (detail?.vertical ? mediaImageUrlOf(creative) : null) ??
+          (detail?.vertical ? detail.poster ?? mediaImageUrlOf(creative) : null) ??
           creative.thumbnail_url ??
           creative.image_url ??
           null,
