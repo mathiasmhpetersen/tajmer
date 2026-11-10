@@ -9,7 +9,7 @@ import type {
   DailySpendPoint,
   MetaCampaignBudget,
 } from "../../shared/budget.js";
-import { budgetSheetId, fetchSheetTab, sheetsConfigured } from "./google-sheets.js";
+import { fetchCsv } from "./budget-csv.js";
 import { buildDailyPlan, deriveAdjustments, parsePlan, parseTiltag } from "./budget-plan.js";
 import {
   fetchCampaignDailyBudgets,
@@ -18,8 +18,6 @@ import {
   type CampaignDailySpend,
 } from "./meta.js";
 
-const PLAN_TAB = "Plan";
-const TILTAG_TAB = "Tiltag";
 const DAY_MS = 86_400_000;
 
 function todayIso(): string {
@@ -59,33 +57,43 @@ interface SheetData {
 
 async function loadSheets(): Promise<SheetData> {
   const warnings: BudgetWarning[] = [];
-  if (!sheetsConfigured()) {
-    warnings.push({
-      code: "not_configured",
-      message:
-        "Google Sheets er ikke konfigureret (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHEET_ID mangler).",
-    });
-    return { plan: parsePlan([]), tiltag: parseTiltag([]), warnings };
-  }
-  const id = budgetSheetId();
+  const planUrl = process.env.PLAN_CSV_URL;
+  const tiltagUrl = process.env.TILTAG_CSV_URL;
   let planRows: string[][] = [];
   let tiltagRows: string[][] = [];
-  try {
-    planRows = await fetchSheetTab(id, PLAN_TAB);
-  } catch (e) {
+
+  if (!planUrl) {
     warnings.push({
-      code: "sheet_unavailable",
-      message: `Kunne ikke læse fanen "Plan": ${(e as Error).message}`,
+      code: "not_configured",
+      message: "PLAN_CSV_URL mangler — budgetdata kan ikke hentes.",
     });
+  } else {
+    try {
+      planRows = await fetchCsv(planUrl);
+    } catch (e) {
+      warnings.push({
+        code: "sheet_unavailable",
+        message: `Kunne ikke hente Plan-CSV: ${(e as Error).message}`,
+      });
+    }
   }
-  try {
-    tiltagRows = await fetchSheetTab(id, TILTAG_TAB);
-  } catch (e) {
+
+  if (!tiltagUrl) {
     warnings.push({
-      code: "sheet_unavailable",
-      message: `Kunne ikke læse fanen "Tiltag": ${(e as Error).message}`,
+      code: "not_configured",
+      message: "TILTAG_CSV_URL mangler — tiltag vises ikke.",
     });
+  } else {
+    try {
+      tiltagRows = await fetchCsv(tiltagUrl);
+    } catch (e) {
+      warnings.push({
+        code: "sheet_unavailable",
+        message: `Kunne ikke hente Tiltag-CSV: ${(e as Error).message}`,
+      });
+    }
   }
+
   return { plan: parsePlan(planRows), tiltag: parseTiltag(tiltagRows), warnings };
 }
 
