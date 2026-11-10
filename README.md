@@ -113,11 +113,30 @@ persisted.
   `preview:feedback:{adId}`). No tokens or passwords are stored. If KV isn't
   configured, the section still lists ads (all "Afventer") and writes return 503.
 
+For the **client** role, `/preview` is a dedicated light, sidebar-less review
+experience (artist tabs, a 3-column grid, approve / "Ret" per ad, progress bar,
+mobile sticky approve bar). The real Meta preview is rendered at its native 400px
+width and scaled down to the card via a `ResizeObserver`, so the whole feed card
+(close X, CTA, like/comment/share) is always visible and never cropped. Clients
+never receive spend, metrics or Ads Manager links (stripped server-side).
+
+**Bulk corrections** ("Ret på flere annoncer", client + admin): one dialog picks a
+field (Overskrift / Primær tekst / Beskrivelse / Andet), a method (Skift til /
+Tilføj i slutningen / Tilføj i starten) and a text, shows a live before→after per
+ad, and writes **one batch** (`preview:batch:{batchId}`) plus a per-ad correction
+referencing it. Resolving a batch (admin/agent) resolves every per-ad correction
+and can attach a per-ad replacement ad id.
+
 Endpoints: `GET /api/preview`, `POST /api/preview/approve`,
-`POST /api/preview/feedback`, `POST /api/preview/feedback/resolve`
-(admin cookie **or** `Authorization: Bearer $PREVIEW_AGENT_TOKEN`), and
+`POST /api/preview/feedback` (optional `field`/`method`),
+`POST /api/preview/feedback/batch` (bulk),
+`POST /api/preview/feedback/resolve` (single or `batchId`; admin cookie **or**
+`Authorization: Bearer $PREVIEW_AGENT_TOKEN`), and
 `GET /api/preview/feedback/open` (same dual auth) — a read-only JSON feed of
-unresolved corrections + approval states for Marketingly's agent.
+unresolved corrections (with `batchId`/`field`/`method`) + approval states for
+Marketingly's agent.
+
+Run `pnpm test` for the unit tests (client-data stripping, correction logic).
 
 ## Deploy (Vercel)
 

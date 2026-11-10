@@ -1,48 +1,22 @@
-import { useState } from "react";
 import { ExternalLink, Play, Copy, AlertTriangle } from "lucide-react";
 import type { AdItem } from "@shared/types";
 import { formatCompact, formatMoney } from "@/lib/format";
-import { cn } from "@/lib/cn";
 import { useIsClient } from "@/lib/session";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import { ScaledPreview } from "./ScaledPreview";
 import { ctaLabel } from "@/lib/cta";
 
-const FRAME_WIDTH = 335;
-const DEFAULT_FRAME_HEIGHT = 620;
+const FRAME_WIDTH = 400;
 
 /**
- * The real Meta MOBILE_FEED_STANDARD preview, rendered directly — the full feed
- * card (page header, primary text, media, CTA, reactions, comments) shows from
- * the start. No thumbnail poster overlay: it only hid the feed chrome until the
- * iframe loaded.
+ * The real Meta MOBILE_FEED_STANDARD preview at its native 400px width, scaled
+ * down to the card — so the whole card (close X, CTA, like/comment/share) is
+ * always visible, never cropped.
  */
 function AdPreviewFrame({ ad }: { ad: AdItem }) {
-  const { preview } = ad;
-  const [failed, setFailed] = useState(false);
-
-  if (!preview.iframeSrc || failed) return <FeedFallback ad={ad} />;
-
-  const frameHeight = preview.frameHeight || DEFAULT_FRAME_HEIGHT;
-
-  return (
-    <div
-      className="relative mx-auto overflow-hidden rounded-tile bg-white"
-      style={{ width: "100%", maxWidth: FRAME_WIDTH, height: frameHeight }}
-    >
-      <iframe
-        title={ad.adName}
-        src={preview.iframeSrc}
-        width={FRAME_WIDTH}
-        height={frameHeight}
-        scrolling="no"
-        allow="autoplay; encrypted-media"
-        loading="lazy"
-        onError={() => setFailed(true)}
-        className="no-scrollbar block h-full w-full border-0"
-      />
-    </div>
-  );
+  if (!ad.preview.iframeSrc) return <FeedFallback ad={ad} />;
+  return <ScaledPreview src={ad.preview.iframeSrc} title={ad.adName} />;
 }
 
 /** Our own feed-style card, used when the Graph preview edge fails (§4). */
@@ -65,12 +39,7 @@ function FeedFallback({ ad }: { ad: AdItem }) {
           {preview.body}
         </p>
       )}
-      <div
-        className={cn(
-          "relative w-full bg-[#e9eaed]",
-          preview.aspect === "portrait" ? "aspect-[9/16]" : "aspect-[4/5]",
-        )}
-      >
+      <div className="relative aspect-[4/5] w-full bg-[#e9eaed]">
         {preview.thumbnailUrl && (
           <img src={preview.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         )}
@@ -156,7 +125,9 @@ export function AdCard({ ad }: { ad: AdItem }) {
               variant="secondary"
               size="sm"
               className="w-full"
-              onClick={() => window.open(ad.adsManagerUrl, "_blank", "noopener")}
+              onClick={() =>
+                ad.adsManagerUrl && window.open(ad.adsManagerUrl, "_blank", "noopener")
+              }
             >
               <ExternalLink className="size-3.5" /> Åbn i Ads Manager
             </Button>

@@ -1,6 +1,8 @@
 import type {
   ApproveItem,
   ArtistResponse,
+  CorrectionField,
+  CorrectionMethod,
   OverviewResponse,
   PreviewResponse,
   Range,
@@ -80,8 +82,13 @@ export function approveBulk(items: ApproveItem[], approved: boolean) {
   return postJson("/api/preview/approve", { items, approved });
 }
 
-export function sendFeedback(adId: string, creativeId: string | null, text: string) {
-  return postJson("/api/preview/feedback", { adId, creativeId, text });
+export function sendFeedback(
+  adId: string,
+  creativeId: string | null,
+  text: string,
+  opts: { field?: CorrectionField; method?: CorrectionMethod } = {},
+) {
+  return postJson("/api/preview/feedback", { adId, creativeId, text, ...opts });
 }
 
 export function resolveFeedback(
@@ -90,6 +97,16 @@ export function resolveFeedback(
   opts: { note?: string; fixedAdId?: string } = {},
 ) {
   return postJson("/api/preview/feedback/resolve", { adId, feedbackId, ...opts });
+}
+
+export function createBulkCorrection(input: {
+  artistSlug: string;
+  field: CorrectionField;
+  method: CorrectionMethod;
+  text: string;
+  items: ApproveItem[];
+}) {
+  return postJson("/api/preview/feedback/batch", input);
 }
 
 export async function login(password: string): Promise<Role> {

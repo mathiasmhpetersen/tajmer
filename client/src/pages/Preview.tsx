@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
-import type { ApproveItem, PreviewAd, PreviewArtistGroup } from "@shared/types";
+import { Layers, RefreshCw } from "lucide-react";
+import type {
+  ApproveItem,
+  CorrectionField,
+  CorrectionMethod,
+  PreviewAd,
+  PreviewArtistGroup,
+} from "@shared/types";
 import {
   approveAd,
   approveBulk,
+  createBulkCorrection,
   fetchPreview,
   resolveFeedback,
   sendFeedback,
@@ -15,7 +22,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ConfirmButton } from "@/components/preview/ConfirmButton";
 import { PreviewAdCard } from "@/components/preview/PreviewAdCard";
-import { AdFormatGroups } from "@/components/AdFormatGroups";
+import { BulkCorrectionDialog } from "@/components/preview/BulkCorrectionDialog";
 import { AdGridSkeleton } from "@/components/Skeletons";
 import { EmptyState, ErrorState } from "@/components/States";
 
@@ -32,8 +39,29 @@ export function Preview() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["preview"], queryFn: fetchPreview });
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
+  const [bulkArtist, setBulkArtist] = useState<PreviewArtistGroup | null>(null);
+  const [correctionBusy, setCorrectionBusy] = useState(false);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["preview"] });
+
+  const onBulkCorrection = async (
+    slug: string,
+    input: {
+      field: CorrectionField;
+      method: CorrectionMethod;
+      text: string;
+      items: ApproveItem[];
+    },
+  ) => {
+    setCorrectionBusy(true);
+    try {
+      await createBulkCorrection({ artistSlug: slug, ...input });
+      await invalidate();
+      setBulkArtist(null);
+    } finally {
+      setCorrectionBusy(false);
+    }
+  };
 
   const onApprove = async (ad: PreviewAd, approved: boolean) => {
     await approveAd(ad.adId, ad.creativeId, approved);
@@ -102,39 +130,53 @@ export function Preview() {
               <section key={group.slug}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-hairline pb-3">
                   <h2 className="text-lg font-semibold tracking-tight">{group.name}</h2>
-                  {items.length > 0 && (
-                    <ConfirmButton
-                      label={`Godkend alle (${items.length})`}
-                      confirmLabel={`Godkend ${items.length} annoncer?`}
-                      loading={bulkBusy === group.slug}
-                      onConfirm={() => runBulk(group.slug, items)}
-                    />
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => setBulkArtist(group)}>
+                      <Layers className="size-3.5" /> Ret på flere annoncer
+                    </Button>
+                    {items.length > 0 && (
+                      <ConfirmButton
+                        label={`Godkend alle (${items.length})`}
+                        confirmLabel={`Godkend ${items.length} annoncer?`}
+                        loading={bulkBusy === group.slug}
+                        onConfirm={() => runBulk(group.slug, items)}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {group.campaigns.map((campaign) => (
                   <div key={campaign.campaignId} className="mb-8 last:mb-0">
                     <h3 className="mb-4 text-sm font-medium text-muted">{campaign.displayName}</h3>
-                    <AdFormatGroups
-                      items={campaign.ads}
-                      getAspect={(ad) => ad.preview.aspect}
-                      getKey={(ad) => ad.adId}
-                      render={(ad) => (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
+                      {campaign.ads.map((ad) => (
                         <PreviewAdCard
+                          key={ad.adId}
                           ad={ad}
                           isClient={isClient}
                           onApprove={onApprove}
                           onFeedback={onFeedback}
                           onResolve={onResolve}
                         />
-                      )}
-                    />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </section>
             );
           })}
         </div>
+      )}
+
+      {bulkArtist && (
+        <BulkCorrectionDialog
+          open
+          artistName={bulkArtist.name}
+          ads={bulkArtist.campaigns.flatMap((c) => c.ads)}
+          submitting={correctionBusy}
+          onClose={() => setBulkArtist(null)}
+          onSubmit={(input) => onBulkCorrection(bulkArtist.slug, input)}
+        />
       )}
     </div>
   );

@@ -1,5 +1,11 @@
 import { Redis } from "@upstash/redis";
-import type { PreviewFeedbackItem, Role } from "../../shared/types.js";
+import type {
+  CorrectionBatch,
+  CorrectionField,
+  CorrectionMethod,
+  PreviewFeedbackItem,
+  Role,
+} from "../../shared/types.js";
 
 /** env var names that look KV/Redis-related, for diagnostics (names only). */
 function kvEnvNames(): string[] {
@@ -141,6 +147,7 @@ export async function addFeedback(
   creativeId: string | null,
   text: string,
   role: Role,
+  meta: { batchId?: string; field?: CorrectionField; method?: CorrectionMethod } = {},
 ): Promise<PreviewFeedbackItem> {
   const client = requireKv();
   const list = (await client.get<PreviewFeedbackItem[]>(feedbackKey(adId))) ?? [];
@@ -150,12 +157,83 @@ export async function addFeedback(
     role,
     createdAt: new Date().toISOString(),
     resolved: false,
+    ...(meta.batchId ? { batchId: meta.batchId } : {}),
+    ...(meta.field ? { field: meta.field } : {}),
+    ...(meta.method ? { method: meta.method } : {}),
   };
   list.push(item);
   await client.set(feedbackKey(adId), list);
   // A correction removes any standing approval (§3).
   await client.del(approvalKey(adId, creativeId));
   return item;
+}
+
+const batchKey = (batchId: string) => `preview:batch:${batchId}`;
+
+/** One "Ret på flere annoncer" batch: a correction per ad + a stored batch. */
+export async function createBatchCorrection(input: {
+  artistSlug: string;
+  field: CorrectionField;
+  method: CorrectionMethod;
+  text: string;
+  items: { adId: string; creativeId: string | null }[];
+  role: Role;
+}): Promise<CorrectionBatch> {
+  const client = requireKv();
+  const batch: CorrectionBatch = {
+    batchId: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    role: input.role,
+    artistSlug: input.artistSlug,
+    field: input.field,
+    method: input.method,
+    text: input.text,
+    adIds: input.items.map((i) => i.adId),
+    creativeIds: input.items.map((i) => i.creativeId),
+  };
+  await client.set(batchKey(batch.batchId), batch);
+  for (const item of input.items) {
+    await addFeedback(item.adId, item.creativeId, input.text, input.role, {
+      batchId: batch.batchId,
+      field: input.field,
+      method: input.method,
+    });
+  }
+  return batch;
+}
+
+export async function getBatch(batchId: string): Promise<CorrectionBatch | null> {
+  const client = kv();
+  if (!client) return null;
+  return (await client.get<CorrectionBatch>(batchKey(batchId))) ?? null;
+}
+
+/** Resolve every per-ad correction tied to a batch. */
+export async function resolveBatch(
+  batchId: string,
+  role: Role,
+  extra: { note?: string; fixedAdIds?: Record<string, string> } = {},
+): Promise<number> {
+  const batch = await getBatch(batchId);
+  if (!batch) return 0;
+  let resolved = 0;
+  for (const adId of batch.adIds) {
+    const list = (await requireKv().get<PreviewFeedbackItem[]>(feedbackKey(adId))) ?? [];
+    let changed = false;
+    for (const item of list) {
+      if (item.batchId === batchId && !item.resolved) {
+        item.resolved = true;
+        item.resolvedBy = role;
+        item.resolvedAt = new Date().toISOString();
+        if (extra.note) item.resolvedNote = extra.note;
+        if (extra.fixedAdIds?.[adId]) item.fixedAdId = extra.fixedAdIds[adId];
+        changed = true;
+        resolved += 1;
+      }
+    }
+    if (changed) await requireKv().set(feedbackKey(adId), list);
+  }
+  return resolved;
 }
 
 export async function resolveFeedback(

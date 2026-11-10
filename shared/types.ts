@@ -23,9 +23,6 @@ export function isRange(value: unknown): value is Range {
   return value === "today" || value === "yesterday" || value === "last_7d";
 }
 
-/** portrait = 9:16-ish (shown taller, grouped separately), standard = everything else. */
-export type MediaAspect = "portrait" | "standard";
-
 export interface AdPreview {
   /** Extracted <iframe src> from the Graph `previews` edge, or null if it failed. */
   iframeSrc: string | null;
@@ -35,9 +32,6 @@ export interface AdPreview {
   body: string | null;
   title: string | null;
   ctaType: string | null;
-  /** Rendered feed-card height (px at 335 wide) computed from the media aspect. */
-  frameHeight: number;
-  aspect: MediaAspect;
 }
 
 export interface AdFlags {
@@ -63,7 +57,8 @@ export interface AdItem {
   imageHash: string | null;
   preview: AdPreview;
   flags: AdFlags;
-  adsManagerUrl: string;
+  /** Admin only — omitted from client responses (contains the account id). */
+  adsManagerUrl?: string;
 }
 
 export interface CampaignGroup {
@@ -123,6 +118,24 @@ export const PREVIEW_STATUS_LABEL: Record<PreviewStatus, string> = {
   rettelser: "Rettelser ønsket",
 };
 
+/** Which creative field a correction targets. */
+export type CorrectionField = "headline" | "primary_text" | "description" | "other";
+/** How the new text is applied (not used for "other"). */
+export type CorrectionMethod = "replace" | "append" | "prepend";
+
+export const CORRECTION_FIELD_LABEL: Record<CorrectionField, string> = {
+  headline: "Overskrift",
+  primary_text: "Primær tekst",
+  description: "Beskrivelse",
+  other: "Andet",
+};
+
+export const CORRECTION_METHOD_LABEL: Record<CorrectionMethod, string> = {
+  replace: "Skift til",
+  append: "Tilføj i slutningen",
+  prepend: "Tilføj i starten",
+};
+
 export interface PreviewFeedbackItem {
   id: string;
   text: string;
@@ -135,6 +148,22 @@ export interface PreviewFeedbackItem {
   resolvedNote?: string;
   /** New ad id this correction was fixed with (links to the replacement ad). */
   fixedAdId?: string;
+  /** Set when this correction is part of a bulk ("Samlet rettelse") batch. */
+  batchId?: string;
+  field?: CorrectionField;
+  method?: CorrectionMethod;
+}
+
+export interface CorrectionBatch {
+  batchId: string;
+  createdAt: string;
+  role: Role;
+  artistSlug: string;
+  field: CorrectionField;
+  method: CorrectionMethod;
+  text: string;
+  adIds: string[];
+  creativeIds: (string | null)[];
 }
 
 export interface PreviewAd {
@@ -156,8 +185,6 @@ export interface PreviewAd {
     title: string | null;
     description: string | null;
     ctaType: string | null;
-    frameHeight: number;
-    aspect: MediaAspect;
   };
   status: PreviewStatus;
   approvedBy?: Role;
