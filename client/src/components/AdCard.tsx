@@ -16,7 +16,14 @@ const FRAME_WIDTH = 400;
  */
 function AdPreviewFrame({ ad }: { ad: AdItem }) {
   if (!ad.preview.iframeSrc) return <FeedFallback ad={ad} />;
-  return <ScaledPreview src={ad.preview.iframeSrc} title={ad.adName} />;
+  return (
+    <ScaledPreview
+      src={ad.preview.iframeSrc}
+      title={ad.adName}
+      nativeWidth={ad.preview.previewWidth}
+      nativeHeight={ad.preview.previewHeight}
+    />
+  );
 }
 
 /** Our own feed-style card, used when the Graph preview edge fails (§4). */

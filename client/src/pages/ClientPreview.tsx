@@ -334,7 +334,12 @@ function ClientAdCard({
       </div>
 
       {ad.preview.iframeSrc ? (
-        <ScaledPreview src={ad.preview.iframeSrc} title={ad.adName} />
+        <ScaledPreview
+          src={ad.preview.iframeSrc}
+          title={ad.adName}
+          nativeWidth={ad.preview.previewWidth}
+          nativeHeight={ad.preview.previewHeight}
+        />
       ) : (
         <div className="flex aspect-[400/640] w-full items-center justify-center rounded-xl bg-neutral-100 text-[13px] text-neutral-400">
           Forhåndsvisning ikke tilgængelig

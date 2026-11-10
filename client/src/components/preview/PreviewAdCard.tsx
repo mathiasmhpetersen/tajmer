@@ -34,7 +34,14 @@ function PreviewFrame({ ad }: { ad: PreviewAd }) {
   const { preview } = ad;
 
   if (preview.iframeSrc) {
-    return <ScaledPreview src={preview.iframeSrc} title={ad.adName} />;
+    return (
+      <ScaledPreview
+        src={preview.iframeSrc}
+        title={ad.adName}
+        nativeWidth={preview.previewWidth}
+        nativeHeight={preview.previewHeight}
+      />
+    );
   }
 
   // Fallback: media + text if the Graph preview fails.

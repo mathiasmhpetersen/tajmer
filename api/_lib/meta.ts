@@ -21,9 +21,30 @@ import type {
 } from "../../shared/types.js";
 import { MetaError, requireEnv } from "./http.js";
 import { readState } from "./kv.js";
+import { fetchImageAspect } from "./imagesize.js";
 import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
+
+// A 9:16 video is masked to ~4:5 in the feed preview, so for truly vertical
+// media we render the Story preview instead — it shows the full frame.
+const PORTRAIT_MAX_ASPECT = 0.7; // w/h below this is vertical (9:16 = 0.56)
+const FEED_FORMAT = "MOBILE_FEED_STANDARD";
+const STORY_FORMAT = "FACEBOOK_STORY_MOBILE";
+// Native iframe sizes we render at (then scale down to the card). The feed card
+// needs 400px wide to show the whole card; the Story is a clean 9:16.
+const FEED_SIZE = { width: 400, height: 640 };
+const STORY_SIZE = { width: 360, height: 640 };
+
+function mediaImageUrlOf(c: RawCreative): string | null {
+  return (
+    c.object_story_spec?.video_data?.image_url ??
+    c.object_story_spec?.link_data?.picture ??
+    c.image_url ??
+    c.thumbnail_url ??
+    null
+  );
+}
 
 function version(): string {
   return process.env.META_API_VERSION || "v21.0";
@@ -285,10 +306,13 @@ async function fetchLargeThumb(creativeId: string): Promise<string | null> {
   }
 }
 
-async function fetchPreviewIframe(adId: string): Promise<string | null> {
+async function fetchPreviewIframe(
+  adId: string,
+  adFormat: string = FEED_FORMAT,
+): Promise<string | null> {
   try {
     const page = await graphGet<GraphPage<{ body?: string }>>(`${adId}/previews`, {
-      ad_format: "MOBILE_FEED_STANDARD",
+      ad_format: adFormat,
     });
     const body = page.data?.[0]?.body;
     if (!body) return null;
@@ -299,6 +323,17 @@ async function fetchPreviewIframe(adId: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Pick the preview format + native render size for an ad's media aspect. */
+function previewFormatFor(ratio: number | null): {
+  format: string;
+  size: { width: number; height: number };
+} {
+  const vertical = ratio != null && ratio > 0 && ratio < PORTRAIT_MAX_ASPECT;
+  return vertical
+    ? { format: STORY_FORMAT, size: STORY_SIZE }
+    : { format: FEED_FORMAT, size: FEED_SIZE };
 }
 
 /** Small thumbnail straight off the ad's creative — used for overview tiles. */
@@ -416,12 +451,14 @@ function metricsOf(r: RawInsight): AdMetrics {
 }
 
 async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
-  const [creative, previewSrc] = await Promise.all([
-    fetchCreative(base.adId).catch(() => ({}) as RawCreative),
-    fetchPreviewIframe(base.adId),
+  const creative = await fetchCreative(base.adId).catch(() => ({}) as RawCreative);
+  const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
+  const { format, size } = previewFormatFor(ratio);
+  const [previewSrc, largeThumb] = await Promise.all([
+    fetchPreviewIframe(base.adId, format),
+    creative.id ? fetchLargeThumb(creative.id) : Promise.resolve(null),
   ]);
   const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
-  const largeThumb = creative.id ? await fetchLargeThumb(creative.id) : null;
   const body = bodyOf(creative);
   const mismatchCity = copyCheck(base.adName, body);
 
@@ -440,6 +477,8 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
     imageHash: imageHashOf(creative),
     preview: {
       iframeSrc: previewSrc,
+      previewWidth: size.width,
+      previewHeight: size.height,
       thumbnailUrl: largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
       isVideo,
       body,
@@ -795,18 +834,22 @@ export async function buildPreview(
   const delivered = await fetchDeliveredAdIds(matched.map(({ ad }) => ad.id));
   const qualifying = matched.filter(({ ad }) => !delivered.has(ad.id));
 
-  // Full creative + live, non-persisted MOBILE_FEED_STANDARD preview — only for
-  // qualifying ads, and skipped entirely for the agent endpoint.
-  const detailByAd = new Map<string, { creative: RawCreative; iframe: string | null }>();
+  // Full creative + live, non-persisted preview (feed, or Story for vertical) —
+  // only for qualifying ads, and skipped entirely for the agent endpoint.
+  const detailByAd = new Map<
+    string,
+    { creative: RawCreative; iframe: string | null; size: { width: number; height: number } }
+  >();
   if (withPreviews) {
     const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
-      const [creative, iframe] = await Promise.all([
-        fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative),
-        fetchPreviewIframe(ad.id),
-      ]);
-      return { id: ad.id, creative, iframe };
+      const creative = await fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative);
+      const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
+      const { format, size } = previewFormatFor(ratio);
+      const iframe = await fetchPreviewIframe(ad.id, format);
+      return { id: ad.id, creative, iframe, size };
     });
-    for (const d of details) detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe });
+    for (const d of details)
+      detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe, size: d.size });
   }
 
   const { approvals, feedback } = await readState(
@@ -837,6 +880,8 @@ export async function buildPreview(
       displayName: stripPrefix(ad.campaign?.name ?? ""),
       preview: {
         iframeSrc: detail?.iframe ?? null,
+        previewWidth: detail?.size.width ?? FEED_SIZE.width,
+        previewHeight: detail?.size.height ?? FEED_SIZE.height,
         thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null,
         isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
         body: bodyOf(creative),
