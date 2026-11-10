@@ -369,12 +369,13 @@ function ClientAdCard({
         <StatusPill status={ad.status} />
       </div>
 
-      {ad.preview.iframeSrc ? (
+      {ad.preview.iframeSrc || ad.preview.videoUrl ? (
         <ScaledPreview
-          src={ad.preview.iframeSrc}
+          src={ad.preview.iframeSrc ?? ""}
           title={ad.adName}
           vertical={ad.preview.vertical}
           poster={ad.preview.thumbnailUrl}
+          videoUrl={ad.preview.videoUrl}
           nativeWidth={ad.preview.previewWidth}
           nativeHeight={ad.preview.previewHeight}
         />

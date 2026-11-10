@@ -363,6 +363,20 @@ async function fetchSmallThumb(adId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Direct, progressively-downloadable video URL for native inline playback.
+ * We use this (not Meta's slow Story preview iframe) for 9:16 videos so they
+ * load fast, play smoothly and pause for real.
+ */
+async function fetchVideoSource(videoId: string): Promise<string | null> {
+  try {
+    const data = await graphGet<{ source?: string }>(videoId, { fields: "source" });
+    return data.source ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Derived helpers
 // ---------------------------------------------------------------------------
@@ -470,15 +484,19 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
   const mediaUrl = mediaImageUrlOf(creative);
   const ratio = await fetchImageAspect(mediaUrl);
   const { format, size, vertical } = previewFormatFor(ratio, base.adName);
-  const [previewSrc, largeThumb] = await Promise.all([
+  const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
+  const [previewSrc, largeThumb, videoUrl] = await Promise.all([
     fetchPreviewIframe(base.adId, format),
     // 9:16 poster for vertical, 4:5 otherwise — Meta's representative frame
     // (not the raw first frame, which is often black).
     creative.id
       ? fetchLargeThumb(creative.id, vertical ? 720 : 1080, vertical ? 1280 : 1350)
       : Promise.resolve(null),
+    // Direct video URL for native inline 9:16 playback.
+    vertical && isVideo && creative.video_id
+      ? fetchVideoSource(creative.video_id)
+      : Promise.resolve(null),
   ]);
-  const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
   const body = bodyOf(creative);
   const mismatchCity = copyCheck(base.adName, body);
 
@@ -503,6 +521,7 @@ async function enrichAd(base: AdBase, metrics: AdMetrics): Promise<AdItem> {
       thumbnailUrl: vertical
         ? largeThumb ?? mediaUrl ?? null
         : largeThumb ?? creative.thumbnail_url ?? creative.image_url ?? null,
+      videoUrl,
       isVideo,
       body,
       title: creative.title ?? creative.object_story_spec?.link_data?.name ?? null,
@@ -867,6 +886,7 @@ export async function buildPreview(
       size: { width: number; height: number };
       vertical: boolean;
       poster: string | null;
+      videoUrl: string | null;
     }
   >();
   if (withPreviews) {
@@ -874,12 +894,17 @@ export async function buildPreview(
       const creative = await fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative);
       const ratio = await fetchImageAspect(mediaImageUrlOf(creative));
       const { format, size, vertical } = previewFormatFor(ratio, ad.name);
-      const [iframe, poster] = await Promise.all([
+      const isVideo = creative.object_type === "VIDEO" || Boolean(creative.video_id);
+      const [iframe, poster, videoUrl] = await Promise.all([
         fetchPreviewIframe(ad.id, format),
         // 9:16 poster (Meta's representative frame) for the play button.
         vertical && creative.id ? fetchLargeThumb(creative.id, 720, 1280) : Promise.resolve(null),
+        // Direct video URL for native inline 9:16 playback.
+        vertical && isVideo && creative.video_id
+          ? fetchVideoSource(creative.video_id)
+          : Promise.resolve(null),
       ]);
-      return { id: ad.id, creative, iframe, size, vertical, poster };
+      return { id: ad.id, creative, iframe, size, vertical, poster, videoUrl };
     });
     for (const d of details)
       detailByAd.set(d.id, {
@@ -888,6 +913,7 @@ export async function buildPreview(
         size: d.size,
         poster: d.poster,
         vertical: d.vertical,
+        videoUrl: d.videoUrl,
       });
   }
 
@@ -927,6 +953,7 @@ export async function buildPreview(
           creative.thumbnail_url ??
           creative.image_url ??
           null,
+        videoUrl: detail?.videoUrl ?? null,
         isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
         body: bodyOf(creative),
         title: headlineOf(creative),

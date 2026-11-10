@@ -33,6 +33,8 @@ export interface AdPreview {
   vertical: boolean;
   /** Large thumbnail (1080×1350 when available) used as poster/fallback. */
   thumbnailUrl: string | null;
+  /** Direct video source (mp4) for native inline playback, when available. */
+  videoUrl: string | null;
   isVideo: boolean;
   body: string | null;
   title: string | null;
@@ -188,6 +190,7 @@ export interface PreviewAd {
     previewHeight: number;
     vertical: boolean;
     thumbnailUrl: string | null;
+    videoUrl: string | null;
     isVideo: boolean;
     body: string | null;
     title: string | null;
