@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-// The Meta preview is rendered at its native size (feed card = 400×640, vertical
-// Story = 360×640) and the wrapper is scaled down to the card width — never up —
-// so the whole ad is visible and nothing is cropped.
+// Feed cards (4:5 / 1:1 / 16:9) are responsive, so we let the iframe fill the
+// card at its native size (no scaling — avoids the "zoomed out" look). Vertical
+// 9:16 Story previews have a fixed 360×640 layout, so those we render at native
+// size and scale the wrapper down to the card width — never up.
 const DEFAULT_WIDTH = 400;
 const DEFAULT_HEIGHT = 640;
+// autoplay is intentionally omitted so videos don't play automatically — the
+// browser then shows Meta's play button.
+const IFRAME_ALLOW = "encrypted-media";
 
 export function ScaledPreview({
   src,
   title,
+  vertical = false,
   nativeWidth = DEFAULT_WIDTH,
   nativeHeight = DEFAULT_HEIGHT,
   className,
 }: {
   src: string;
   title: string;
+  vertical?: boolean;
   nativeWidth?: number;
   nativeHeight?: number;
   className?: string;
@@ -31,7 +37,7 @@ export function ScaledPreview({
       const w = entries[0].contentRect.width;
       if (w > 0) setScale(Math.min(1, w / nativeWidth));
     });
-    ro.observe(el);
+    if (vertical) ro.observe(el);
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -46,8 +52,37 @@ export function ScaledPreview({
       ro.disconnect();
       io.disconnect();
     };
-  }, [nativeWidth]);
+  }, [nativeWidth, vertical]);
 
+  const skeleton = (
+    <div className="absolute inset-0 animate-pulse bg-black/[0.04] motion-reduce:animate-none" />
+  );
+
+  // Feed: the iframe fills the card at native size.
+  if (!vertical) {
+    return (
+      <div
+        ref={boxRef}
+        className={cn("relative w-full overflow-hidden rounded-xl bg-white", className)}
+        style={{ aspectRatio: `${nativeWidth} / ${nativeHeight}` }}
+      >
+        {inView ? (
+          <iframe
+            title={title}
+            src={src}
+            scrolling="no"
+            loading="lazy"
+            allow={IFRAME_ALLOW}
+            className="absolute inset-0 block h-full w-full border-0"
+          />
+        ) : (
+          skeleton
+        )}
+      </div>
+    );
+  }
+
+  // Vertical 9:16 Story: native 360×640 scaled down to the card, centered.
   return (
     <div
       ref={boxRef}
@@ -66,12 +101,12 @@ export function ScaledPreview({
             height={nativeHeight}
             scrolling="no"
             loading="lazy"
-            allow="autoplay; encrypted-media"
+            allow={IFRAME_ALLOW}
             className="block border-0"
           />
         </div>
       ) : (
-        <div className="absolute inset-0 animate-pulse bg-black/[0.04] motion-reduce:animate-none" />
+        skeleton
       )}
     </div>
   );

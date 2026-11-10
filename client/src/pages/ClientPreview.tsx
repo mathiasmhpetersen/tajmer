@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Mic2, Layers, X } from "lucide-react";
+import { Link } from "wouter";
+import { Check, ChevronDown, ExternalLink, Mic2, Layers, X } from "lucide-react";
 import {
   CORRECTION_FIELD_LABEL,
   CORRECTION_METHOD_LABEL,
@@ -10,14 +11,27 @@ import {
   type PreviewAd,
   type PreviewArtistGroup,
   type PreviewStatus,
+  type Role,
 } from "@shared/types";
-import { approveAd, approveBulk, createBulkCorrection, fetchPreview, sendFeedback } from "@/lib/api";
+import {
+  approveAd,
+  approveBulk,
+  createBulkCorrection,
+  fetchPreview,
+  resolveFeedback,
+  sendFeedback,
+} from "@/lib/api";
+import { useRole } from "@/lib/session";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { ScaledPreview } from "@/components/ScaledPreview";
 import { BulkCorrectionDialog, type BulkInitial } from "@/components/preview/BulkCorrectionDialog";
 
 const ACCENT = "#e07d2e";
+
+function roleLabel(role: Role): string {
+  return role === "admin" ? "Marketingly" : "Kunde";
+}
 
 const STATUS_STYLE: Record<PreviewStatus, { dot: string; text: string; bg: string }> = {
   afventer: { dot: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50" },
@@ -59,6 +73,7 @@ function StatusPill({ status }: { status: PreviewStatus }) {
 
 export function ClientPreview() {
   const qc = useQueryClient();
+  const isAdmin = useRole() === "admin";
   const query = useQuery({ queryKey: ["preview"], queryFn: fetchPreview });
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [busyAd, setBusyAd] = useState<string | null>(null);
@@ -116,6 +131,15 @@ export function ClientPreview() {
     await invalidate();
   };
 
+  const onResolve = async (
+    ad: PreviewAd,
+    feedbackId: string,
+    opts: { note?: string; fixedAdId?: string },
+  ) => {
+    await resolveFeedback(ad.adId, feedbackId, opts);
+    await invalidate();
+  };
+
   const onBulkSubmit = async (
     artistSlug: string,
     input: {
@@ -142,12 +166,19 @@ export function ClientPreview() {
       <header className="sticky top-0 z-30 border-b border-black/[0.06] bg-[#fafafa]/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-4 py-3 sm:px-6">
           <div className="flex flex-1 items-center gap-2">
-            <span
+            <Link
+              href="/"
               className="flex size-8 items-center justify-center rounded-lg text-white"
               style={{ background: ACCENT }}
+              aria-label="Til dashboard"
             >
               <Mic2 className="size-4" />
-            </span>
+            </Link>
+            {isAdmin && (
+              <Link href="/" className="text-[13px] text-neutral-500 hover:text-neutral-800">
+                ← Dashboard
+              </Link>
+            )}
           </div>
           <div className="text-[15px] font-semibold tracking-tight">Tajmer · Preview</div>
           <div className="flex flex-1 justify-end">
@@ -245,6 +276,7 @@ export function ClientPreview() {
                       ad={ad}
                       index={i + 1}
                       total={activeAds.length}
+                      isAdmin={isAdmin}
                       busy={busyAd === ad.adId}
                       onApprove={onApprove}
                       onRet={() => setRetAd(ad)}
@@ -277,8 +309,10 @@ export function ClientPreview() {
       {retAdLive && (
         <RetPanel
           ad={retAdLive}
+          isAdmin={isAdmin}
           onClose={() => setRetAd(null)}
           onSend={(input) => onSendCorrection(retAdLive, input)}
+          onResolve={(feedbackId, opts) => onResolve(retAdLive, feedbackId, opts)}
           onBulk={(initial) => {
             setBulk({ initial });
           }}
@@ -305,6 +339,7 @@ function ClientAdCard({
   ad,
   index,
   total,
+  isAdmin,
   busy,
   onApprove,
   onRet,
@@ -312,6 +347,7 @@ function ClientAdCard({
   ad: PreviewAd;
   index: number;
   total: number;
+  isAdmin: boolean;
   busy: boolean;
   onApprove: (ad: PreviewAd, approve: boolean) => void;
   onRet: () => void;
@@ -337,6 +373,7 @@ function ClientAdCard({
         <ScaledPreview
           src={ad.preview.iframeSrc}
           title={ad.adName}
+          vertical={ad.preview.vertical}
           nativeWidth={ad.preview.previewWidth}
           nativeHeight={ad.preview.previewHeight}
         />
@@ -399,6 +436,16 @@ function ClientAdCard({
           )}
           <Detail label="Annoncesæt" value={ad.adsetName || "—"} />
           <Detail label="Kampagne" value={ad.displayName || "—"} />
+          {isAdmin && ad.adsManagerUrl && (
+            <a
+              href={ad.adsManagerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 pt-1 text-[13px] text-neutral-500 hover:text-neutral-800"
+            >
+              <ExternalLink className="size-3.5" /> Ads Manager
+            </a>
+          )}
         </dl>
       )}
     </div>
@@ -416,25 +463,48 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function RetPanel({
   ad,
+  isAdmin,
   onClose,
   onSend,
+  onResolve,
   onBulk,
 }: {
   ad: PreviewAd;
+  isAdmin: boolean;
   onClose: () => void;
   onSend: (input: {
     field: CorrectionField;
     method: CorrectionMethod;
     text: string;
   }) => Promise<void>;
+  onResolve: (feedbackId: string, opts: { note?: string; fixedAdId?: string }) => Promise<void>;
   onBulk: (initial: BulkInitial) => void;
 }) {
   const [field, setField] = useState<CorrectionField>("headline");
   const [method, setMethod] = useState<CorrectionMethod>("replace");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  // Clients only see their own corrections.
-  const myCorrections = ad.feedback.filter((f) => f.role === "client");
+  const [resolveFormId, setResolveFormId] = useState<string | null>(null);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveFixedAdId, setResolveFixedAdId] = useState("");
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // Admin sees every correction; clients only their own.
+  const myCorrections = isAdmin ? ad.feedback : ad.feedback.filter((f) => f.role === "client");
+
+  const submitResolve = async (feedbackId: string) => {
+    setResolvingId(feedbackId);
+    try {
+      await onResolve(feedbackId, {
+        note: resolveNote.trim() || undefined,
+        fixedAdId: resolveFixedAdId.trim() || undefined,
+      });
+      setResolveFormId(null);
+      setResolveNote("");
+      setResolveFixedAdId("");
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
   const submit = async () => {
     const value = text.trim();
@@ -494,7 +564,10 @@ function RetPanel({
                   )}
                   <p className={cn(f.resolved && "line-through")}>{f.text}</p>
                   <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-neutral-400">
-                    <span>{formatDateTime(f.createdAt)}</span>
+                    <span>
+                      {isAdmin ? `${roleLabel(f.role)} · ` : ""}
+                      {formatDateTime(f.createdAt)}
+                    </span>
                     {f.resolved && (
                       <span className="inline-flex items-center gap-1 text-green-600">
                         <Check className="size-3" /> Løst
@@ -508,21 +581,67 @@ function RetPanel({
                     </div>
                   )}
                   {!f.resolved && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onBulk({
-                          field: f.field,
-                          method: f.method,
-                          text: f.text,
-                          adIds: undefined,
-                        })
-                      }
-                      className="mt-2 text-[12px] font-medium"
-                      style={{ color: ACCENT }}
-                    >
-                      Gentag på alle andre annoncer
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onBulk({ field: f.field, method: f.method, text: f.text })
+                        }
+                        className="text-[12px] font-medium"
+                        style={{ color: ACCENT }}
+                      >
+                        Gentag på alle andre annoncer
+                      </button>
+                      {isAdmin && resolveFormId !== f.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResolveFormId(f.id);
+                            setResolveNote("");
+                            setResolveFixedAdId("");
+                          }}
+                          className="text-[12px] font-medium text-neutral-600 hover:text-neutral-900"
+                        >
+                          Markér som løst
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {isAdmin && !f.resolved && resolveFormId === f.id && (
+                    <div className="mt-2 flex flex-col gap-2">
+                      <textarea
+                        value={resolveNote}
+                        onChange={(e) => setResolveNote(e.target.value)}
+                        rows={2}
+                        placeholder="Note til kunden (valgfri)"
+                        className="w-full resize-y rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-[#e07d2e]"
+                      />
+                      <input
+                        value={resolveFixedAdId}
+                        onChange={(e) => setResolveFixedAdId(e.target.value)}
+                        placeholder="Nyt annonce-ID (valgfri)"
+                        className="w-full rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-[#e07d2e]"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={resolvingId === f.id}
+                          onClick={() => submitResolve(f.id)}
+                          className="rounded-lg px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                          style={{ background: ACCENT }}
+                        >
+                          {resolvingId === f.id ? "…" : "Bekræft løst"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResolveFormId(null)}
+                          className="text-[12px] font-medium text-neutral-500"
+                        >
+                          Annuller
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}

@@ -159,7 +159,7 @@ export function ArtistPage({ slug }: { slug: string }) {
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-6">
                     {campaign.ads.map((ad) => (
                       <AdCard key={ad.adId} ad={ad} />
                     ))}
