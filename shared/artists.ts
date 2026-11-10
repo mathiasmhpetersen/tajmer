@@ -5,6 +5,8 @@ export interface Artist {
   slug: string;
   name: string;
   match: string[];
+  /** Google Sheet id of this artist's ticket-sales sheet (PR3). */
+  ticketSheetId?: string;
 }
 
 export const ARTISTS: Artist[] = [
@@ -33,4 +35,20 @@ export function campaignMatchesArtist(campaignName: string, artist: Artist): boo
 /** First artist whose match strings appear in the campaign name, else undefined. */
 export function artistForCampaign(campaignName: string): Artist | undefined {
   return ARTISTS.find((a) => campaignMatchesArtist(campaignName, a));
+}
+
+/**
+ * Resolve an artist from a free-text name as written in a sheet's "Artist"
+ * column — matches the display name or any `match` string, case-insensitive and
+ * whitespace-tolerant.
+ */
+export function artistForName(name: string): Artist | undefined {
+  const needle = name.trim().toLowerCase();
+  if (!needle) return undefined;
+  return ARTISTS.find(
+    (a) =>
+      a.name.toLowerCase() === needle ||
+      a.slug === needle ||
+      a.match.some((m) => needle.includes(m.toLowerCase()) || m.toLowerCase().includes(needle)),
+  );
 }
