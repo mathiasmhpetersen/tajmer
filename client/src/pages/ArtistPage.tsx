@@ -18,6 +18,7 @@ import { RangeToggle } from "@/components/RangeToggle";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Button } from "@/components/ui/Button";
 import { AdCard } from "@/components/AdCard";
+import { AdFormatGroups } from "@/components/AdFormatGroups";
 import { AdGridSkeleton, KpiRowSkeleton } from "@/components/Skeletons";
 import { EmptyState, ErrorState } from "@/components/States";
 
@@ -159,11 +160,12 @@ export function ArtistPage({ slug }: { slug: string }) {
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6">
-                    {campaign.ads.map((ad) => (
-                      <AdCard key={ad.adId} ad={ad} />
-                    ))}
-                  </div>
+                  <AdFormatGroups
+                    items={campaign.ads}
+                    getAspect={(ad) => ad.preview.aspect}
+                    getKey={(ad) => ad.adId}
+                    render={(ad) => <AdCard ad={ad} />}
+                  />
                 </section>
               ))
             )}

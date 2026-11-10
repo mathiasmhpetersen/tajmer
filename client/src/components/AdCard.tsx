@@ -2,13 +2,14 @@ import { useState } from "react";
 import { ExternalLink, Play, Copy, AlertTriangle } from "lucide-react";
 import type { AdItem } from "@shared/types";
 import { formatCompact, formatMoney } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import { useIsClient } from "@/lib/session";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { ctaLabel } from "@/lib/cta";
 
 const FRAME_WIDTH = 335;
-const FRAME_HEIGHT = 620;
+const DEFAULT_FRAME_HEIGHT = 620;
 
 /**
  * The real Meta MOBILE_FEED_STANDARD preview, rendered directly — the full feed
@@ -22,16 +23,18 @@ function AdPreviewFrame({ ad }: { ad: AdItem }) {
 
   if (!preview.iframeSrc || failed) return <FeedFallback ad={ad} />;
 
+  const frameHeight = preview.frameHeight || DEFAULT_FRAME_HEIGHT;
+
   return (
     <div
       className="relative mx-auto overflow-hidden rounded-tile bg-white"
-      style={{ width: "100%", maxWidth: FRAME_WIDTH, height: FRAME_HEIGHT }}
+      style={{ width: "100%", maxWidth: FRAME_WIDTH, height: frameHeight }}
     >
       <iframe
         title={ad.adName}
         src={preview.iframeSrc}
         width={FRAME_WIDTH}
-        height={FRAME_HEIGHT}
+        height={frameHeight}
         scrolling="no"
         allow="autoplay; encrypted-media"
         loading="lazy"
@@ -62,7 +65,12 @@ function FeedFallback({ ad }: { ad: AdItem }) {
           {preview.body}
         </p>
       )}
-      <div className="relative aspect-[4/5] w-full bg-[#e9eaed]">
+      <div
+        className={cn(
+          "relative w-full bg-[#e9eaed]",
+          preview.aspect === "portrait" ? "aspect-[9/16]" : "aspect-[4/5]",
+        )}
+      >
         {preview.thumbnailUrl && (
           <img src={preview.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         )}

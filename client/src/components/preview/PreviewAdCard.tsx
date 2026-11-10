@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { ctaLabel } from "@/lib/cta";
 
 const FRAME_WIDTH = 335;
-const FRAME_HEIGHT = 620;
+const DEFAULT_FRAME_HEIGHT = 620;
 
 const STATUS_TONE: Record<PreviewStatus, "neutral" | "success" | "warning"> = {
   afventer: "neutral",
@@ -36,17 +36,19 @@ function PreviewFrame({ ad }: { ad: PreviewAd }) {
   const { preview } = ad;
   const [failed, setFailed] = useState(false);
 
+  const frameHeight = preview.frameHeight || DEFAULT_FRAME_HEIGHT;
+
   if (preview.iframeSrc && !failed) {
     return (
       <div
         className="relative mx-auto overflow-hidden rounded-tile bg-white"
-        style={{ width: "100%", maxWidth: FRAME_WIDTH, height: FRAME_HEIGHT }}
+        style={{ width: "100%", maxWidth: FRAME_WIDTH, height: frameHeight }}
       >
         <iframe
           title={ad.adName}
           src={preview.iframeSrc}
           width={FRAME_WIDTH}
-          height={FRAME_HEIGHT}
+          height={frameHeight}
           scrolling="no"
           allow="autoplay; encrypted-media"
           loading="lazy"
@@ -66,7 +68,12 @@ function PreviewFrame({ ad }: { ad: PreviewAd }) {
       {preview.body && (
         <p className="px-3 pb-2 pt-3 text-[13px] leading-snug line-clamp-3">{preview.body}</p>
       )}
-      <div className="relative aspect-[4/5] w-full bg-[#e9eaed]">
+      <div
+        className={cn(
+          "relative w-full bg-[#e9eaed]",
+          preview.aspect === "portrait" ? "aspect-[9/16]" : "aspect-[4/5]",
+        )}
+      >
         {preview.thumbnailUrl && (
           <img src={preview.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         )}
