@@ -270,6 +270,77 @@ export async function fetchAdInsights(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Budget tool (admin only) — read-only spend-by-day and configured daily budgets
+// ---------------------------------------------------------------------------
+
+interface RawDailyInsight {
+  campaign_id: string;
+  campaign_name: string;
+  spend: string;
+  date_start: string; // YYYY-MM-DD
+  date_stop: string;
+}
+
+export interface CampaignDailySpend {
+  campaignId: string;
+  campaignName: string;
+  date: string; // ISO YYYY-MM-DD
+  spend: number;
+}
+
+/**
+ * Per-campaign, per-day spend across an explicit date window (time_increment=1).
+ * No status filter — historical spend from paused/ended campaigns still counts.
+ */
+export async function fetchDailySpend(
+  since: string,
+  until: string,
+): Promise<CampaignDailySpend[]> {
+  const rows = await graphGetAll<RawDailyInsight>(account() + "/insights", {
+    level: "campaign",
+    time_increment: "1",
+    time_range: JSON.stringify({ since, until }),
+    fields: "campaign_id,campaign_name,spend,date_start,date_stop",
+    limit: "500",
+  });
+  return rows.map((r) => ({
+    campaignId: r.campaign_id,
+    campaignName: r.campaign_name,
+    date: r.date_start,
+    spend: Number(r.spend) || 0,
+  }));
+}
+
+interface RawCampaignBudget {
+  id: string;
+  name: string;
+  effective_status: string;
+  daily_budget?: string; // minor units
+}
+
+export interface CampaignDailyBudget {
+  campaignId: string;
+  campaignName: string;
+  /** kr (minor units ÷ 100), or null when the budget lives on the ad sets. */
+  dailyBudget: number | null;
+  status: string;
+}
+
+/** Each campaign's configured daily budget (minor units ÷ 100). */
+export async function fetchCampaignDailyBudgets(): Promise<CampaignDailyBudget[]> {
+  const rows = await graphGetAll<RawCampaignBudget>(account() + "/campaigns", {
+    fields: "id,name,effective_status,daily_budget",
+    limit: "500",
+  });
+  return rows.map((r) => ({
+    campaignId: r.id,
+    campaignName: r.name,
+    dailyBudget: r.daily_budget ? Number(r.daily_budget) / 100 : null,
+    status: r.effective_status,
+  }));
+}
+
 async function fetchCreative(adId: string): Promise<RawCreative> {
   const data = await graphGet<{ creative?: RawCreative }>(adId, {
     fields:
