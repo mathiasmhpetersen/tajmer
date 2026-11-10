@@ -89,6 +89,36 @@ The role is carried in the signed `tajmer_auth` cookie; `/api/session` reports i
 to the app on load. The admin cookie signature is unchanged from the single-role
 build, so existing admin logins keep working.
 
+## Preview / approval (`/preview`)
+
+A section (sidebar → Værktøj → Preview) showing ads that are **set up but not yet
+delivering** — ad-level `PAUSED / IN_PROCESS / PENDING_REVIEW / WITH_ISSUES`, or
+`ACTIVE` with a future ad-set start — so the client (Tenna) can approve them
+before they go live. To keep it to genuinely new ads (an account accumulates
+hundreds of old paused ads), candidates are scoped to those **created in the last
+`PREVIEW_MAX_AGE_DAYS` days** (default 45) that have **never delivered** (0
+lifetime impressions). Ads whose name starts with `SLET |` are excluded; ads are
+grouped by artist → campaign. Previews are fetched live per request and never
+persisted.
+
+- **Approve** per ad (toggle), per artist ("Godkend alle (N)") or all at once
+  ("Godkend alle artister"); bulk actions confirm first. Status: _Afventer
+  godkendelse_ / _Godkendt_ / _Rettelser ønsket_. Advisory only — nothing is
+  changed in Meta. Approval is keyed by **creative id**, so replacing an ad's
+  creative resets its approval automatically.
+- **Corrections:** a thread per ad; sending one sets _Rettelser ønsket_ and clears
+  approval. Marketingly marks a correction _Løst_ (optionally with a note shown to
+  the client and a replacement ad id), after which approval must be given again.
+- **Storage:** Vercel KV / Upstash Redis (`preview:approval:{adId}:{creativeId}`,
+  `preview:feedback:{adId}`). No tokens or passwords are stored. If KV isn't
+  configured, the section still lists ads (all "Afventer") and writes return 503.
+
+Endpoints: `GET /api/preview`, `POST /api/preview/approve`,
+`POST /api/preview/feedback`, `POST /api/preview/feedback/resolve`
+(admin cookie **or** `Authorization: Bearer $PREVIEW_AGENT_TOKEN`), and
+`GET /api/preview/feedback/open` (same dual auth) — a read-only JSON feed of
+unresolved corrections + approval states for Marketingly's agent.
+
 ## Deploy (Vercel)
 
 The repo is connected to the `tajmer` Vercel project and auto-deploys on push to

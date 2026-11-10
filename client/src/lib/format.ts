@@ -47,3 +47,29 @@ export function formatToday(date = new Date()): string {
   const s = dateFormatter.format(date);
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+const shortDate = new Intl.DateTimeFormat("da-DK", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/** "1. jan. 2027" — for ad set start/end dates. */
+export function formatDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : shortDate.format(d);
+}
+
+const dateTime = new Intl.DateTimeFormat("da-DK", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** "1. jan. 14:32" — for approval/feedback timestamps. */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : dateTime.format(d);
+}

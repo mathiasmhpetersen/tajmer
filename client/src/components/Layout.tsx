@@ -8,7 +8,11 @@ import { ThemeToggle } from "./ThemeToggle";
 /** Mobile: the sidebar collapses to a top bar with a scrolling chip row. */
 function MobileBar() {
   const [location] = useLocation();
-  const items = [{ slug: "", name: "Oversigt" }, ...ARTISTS];
+  const items = [
+    { slug: "", name: "Oversigt" },
+    { slug: "preview", name: "Preview" },
+    ...ARTISTS,
+  ];
   return (
     <div className="sticky top-0 z-20 border-b border-hairline bg-page/90 backdrop-blur md:hidden">
       <div className="flex items-center justify-between px-4 py-3">

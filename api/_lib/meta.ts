@@ -11,10 +11,16 @@ import type {
   ArtistSummary,
   CampaignGroup,
   OverviewResponse,
+  PreviewAd,
+  PreviewArtistGroup,
+  PreviewCampaignGroup,
+  PreviewResponse,
+  PreviewStatus,
   Range,
   Role,
 } from "../../shared/types.js";
 import { MetaError, requireEnv } from "./http.js";
+import { readState } from "./kv.js";
 import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
@@ -157,8 +163,20 @@ interface RawAd {
 }
 
 interface RawStorySpec {
-  link_data?: { image_hash?: string; message?: string; name?: string };
-  video_data?: { image_hash?: string; message?: string; video_id?: string };
+  link_data?: {
+    image_hash?: string;
+    message?: string;
+    name?: string;
+    description?: string;
+    caption?: string;
+  };
+  video_data?: {
+    image_hash?: string;
+    message?: string;
+    video_id?: string;
+    title?: string;
+    link_description?: string;
+  };
 }
 
 interface RawCreative {
@@ -166,12 +184,30 @@ interface RawCreative {
   object_type?: string;
   body?: string;
   title?: string;
+  description?: string;
   call_to_action_type?: string;
   thumbnail_url?: string;
   image_url?: string;
   image_hash?: string;
   video_id?: string;
   object_story_spec?: RawStorySpec;
+  // Advantage+ / flexible creatives keep their copy here, not in body/title.
+  asset_feed_spec?: {
+    bodies?: { text?: string }[];
+    titles?: { text?: string }[];
+    descriptions?: { text?: string }[];
+    call_to_action_types?: string[];
+  };
+}
+
+interface RawPreviewAd {
+  id: string;
+  name: string;
+  effective_status: string;
+  created_time?: string;
+  creative?: RawCreative;
+  adset?: { id?: string; name?: string; start_time?: string; end_time?: string };
+  campaign?: { id?: string; name?: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +350,7 @@ function bodyOf(c: RawCreative): string | null {
     c.body ??
     c.object_story_spec?.link_data?.message ??
     c.object_story_spec?.video_data?.message ??
+    c.asset_feed_spec?.bodies?.[0]?.text ??
     null
   );
 }
@@ -642,4 +679,199 @@ function stripOverviewForClient(r: OverviewResponse): OverviewResponse {
     biggestSpender: null,
     artists: r.artists.map((a) => ({ ...a, spend: 0, impressions: 0 })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Preview / approval
+// ---------------------------------------------------------------------------
+
+// Ads that are set up but not delivering yet (§1). Ad-level statuses only —
+// NOT the parent-paused variants (CAMPAIGN_PAUSED/ADSET_PAUSED), which would
+// surface the whole historical backlog of paused ads. "SCHEDULED" isn't a real
+// ad effective_status, so future-scheduled ads are caught via ACTIVE + a future
+// ad-set start_time.
+const PREVIEW_STATUSES = ["PAUSED", "IN_PROCESS", "PENDING_REVIEW", "WITH_ISSUES", "ACTIVE"];
+const NOT_LIVE_STATUSES = new Set([
+  "PAUSED",
+  "IN_PROCESS",
+  "PENDING_REVIEW",
+  "WITH_ISSUES",
+]);
+// Only consider recently-created ads — an account accumulates hundreds of old
+// paused ads otherwise. New ads awaiting approval are made within this window.
+const PREVIEW_MAX_AGE_DAYS = 45;
+
+// Keep the list query light (Meta rejects large nested payloads across many ads);
+// full creative details are fetched only for the ads that actually qualify.
+// Scoped server-side to recently-created ads.
+async function fetchPreviewCandidates(): Promise<RawPreviewAd[]> {
+  const since = Math.floor(Date.now() / 1000) - PREVIEW_MAX_AGE_DAYS * 86400;
+  return graphGetAll<RawPreviewAd>(account() + "/ads", {
+    fields:
+      "id,name,created_time,effective_status,creative{id},adset{id,name,start_time,end_time},campaign{id,name}",
+    filtering: JSON.stringify([
+      { field: "ad.effective_status", operator: "IN", value: PREVIEW_STATUSES },
+      { field: "created_time", operator: "GREATER_THAN", value: since },
+    ]),
+    limit: "200",
+  });
+}
+
+/** Of the given ads, which have ever delivered (lifetime impressions > 0). */
+async function fetchDeliveredAdIds(adIds: string[]): Promise<Set<string>> {
+  if (adIds.length === 0) return new Set();
+  const rows = await graphGetAll<{ ad_id: string }>(
+    account() + "/insights",
+    {
+      level: "ad",
+      date_preset: "maximum",
+      fields: "ad_id",
+      filtering: JSON.stringify([
+        { field: "ad.id", operator: "IN", value: adIds },
+        { field: "impressions", operator: "GREATER_THAN", value: 0 },
+      ]),
+      limit: "500",
+    },
+    50000,
+  );
+  return new Set(rows.map((r) => r.ad_id));
+}
+
+async function fetchPreviewCreative(adId: string): Promise<RawCreative> {
+  const data = await graphGet<{ creative?: RawCreative }>(adId, {
+    fields:
+      "creative{id,object_type,body,title,call_to_action_type,thumbnail_url,image_url,image_hash,video_id,object_story_spec{link_data{message,name,description,caption},video_data{message,title,link_description}},asset_feed_spec{bodies,titles,descriptions,call_to_action_types}}",
+  });
+  return data.creative ?? {};
+}
+
+function qualifiesForPreview(ad: RawPreviewAd): boolean {
+  if (!ad.name || ad.name.trimStart().startsWith("SLET |")) return false;
+  if (NOT_LIVE_STATUSES.has(ad.effective_status)) return true;
+  if (ad.effective_status === "ACTIVE") {
+    const start = ad.adset?.start_time ? Date.parse(ad.adset.start_time) : NaN;
+    return Number.isFinite(start) && start > Date.now();
+  }
+  return false;
+}
+
+function headlineOf(c: RawCreative): string | null {
+  return (
+    c.title ??
+    c.object_story_spec?.link_data?.name ??
+    c.object_story_spec?.video_data?.title ??
+    c.asset_feed_spec?.titles?.[0]?.text ??
+    null
+  );
+}
+
+function descriptionOf(c: RawCreative): string | null {
+  return (
+    c.description ??
+    c.object_story_spec?.link_data?.description ??
+    c.object_story_spec?.video_data?.link_description ??
+    c.asset_feed_spec?.descriptions?.[0]?.text ??
+    null
+  );
+}
+
+export async function buildPreview(
+  role: Role = "admin",
+  opts: { withPreviews?: boolean } = {},
+): Promise<PreviewResponse> {
+  const withPreviews = opts.withPreviews ?? true;
+  const candidates = await fetchPreviewCandidates();
+
+  const matched = candidates
+    .filter(qualifiesForPreview)
+    .map((ad) => ({ ad, artist: artistForCampaign(ad.campaign?.name ?? "") }))
+    .filter((x): x is { ad: RawPreviewAd; artist: Artist } => Boolean(x.artist));
+
+  // "Not yet delivering" (§1): drop any candidate that has already delivered,
+  // keeping only ads awaiting their first launch.
+  const delivered = await fetchDeliveredAdIds(matched.map(({ ad }) => ad.id));
+  const qualifying = matched.filter(({ ad }) => !delivered.has(ad.id));
+
+  // Full creative + live, non-persisted MOBILE_FEED_STANDARD preview — only for
+  // qualifying ads, and skipped entirely for the agent endpoint.
+  const detailByAd = new Map<string, { creative: RawCreative; iframe: string | null }>();
+  if (withPreviews) {
+    const details = await mapLimit(qualifying, PREVIEW_CONCURRENCY, async ({ ad }) => {
+      const [creative, iframe] = await Promise.all([
+        fetchPreviewCreative(ad.id).catch(() => ({}) as RawCreative),
+        fetchPreviewIframe(ad.id),
+      ]);
+      return { id: ad.id, creative, iframe };
+    });
+    for (const d of details) detailByAd.set(d.id, { creative: d.creative, iframe: d.iframe });
+  }
+
+  const { approvals, feedback } = await readState(
+    qualifying.map(({ ad }) => ({ adId: ad.id, creativeId: ad.creative?.id ?? null })),
+  );
+
+  // Group artist -> campaign, preserving ARTISTS order.
+  const bySlug = new Map<string, PreviewArtistGroup>();
+  for (const { ad, artist } of qualifying) {
+    const detail = detailByAd.get(ad.id);
+    const creative = detail?.creative ?? ad.creative ?? {};
+    const creativeId = creative.id ?? ad.creative?.id ?? null;
+    const open = (feedback.get(ad.id) ?? []).filter((f) => !f.resolved);
+    const approval = approvals.get(ad.id) ?? null;
+    const status: PreviewStatus =
+      open.length > 0 ? "rettelser" : approval ? "godkendt" : "afventer";
+
+    const item: PreviewAd = {
+      adId: ad.id,
+      adName: ad.name,
+      creativeId,
+      effectiveStatus: ad.effective_status,
+      adsetName: ad.adset?.name ?? "",
+      startTime: ad.adset?.start_time ?? null,
+      endTime: ad.adset?.end_time ?? null,
+      campaignId: ad.campaign?.id ?? "",
+      campaignName: ad.campaign?.name ?? "",
+      displayName: stripPrefix(ad.campaign?.name ?? ""),
+      preview: {
+        iframeSrc: detail?.iframe ?? null,
+        thumbnailUrl: creative.thumbnail_url ?? creative.image_url ?? null,
+        isVideo: creative.object_type === "VIDEO" || Boolean(creative.video_id),
+        body: bodyOf(creative),
+        title: headlineOf(creative),
+        description: descriptionOf(creative),
+        ctaType:
+          creative.call_to_action_type ??
+          creative.asset_feed_spec?.call_to_action_types?.[0] ??
+          null,
+      },
+      status,
+      approvedBy: approval?.approvedBy,
+      approvedAt: approval?.approvedAt,
+      feedback: feedback.get(ad.id) ?? [],
+      adsManagerUrl: role === "admin" ? adsManagerUrl(ad.id) : undefined,
+    };
+
+    let group = bySlug.get(artist.slug);
+    if (!group) {
+      group = { slug: artist.slug, name: artist.name, pendingCount: 0, campaigns: [] };
+      bySlug.set(artist.slug, group);
+    }
+    let campaign = group.campaigns.find((c) => c.campaignId === item.campaignId);
+    if (!campaign) {
+      campaign = {
+        campaignId: item.campaignId,
+        displayName: item.displayName,
+        ads: [],
+      };
+      group.campaigns.push(campaign);
+    }
+    campaign.ads.push(item);
+    if (status !== "godkendt") group.pendingCount += 1;
+  }
+
+  const artists = ARTISTS.map((a) => bySlug.get(a.slug)).filter(
+    (g): g is PreviewArtistGroup => Boolean(g),
+  );
+
+  return { role, artists };
 }
