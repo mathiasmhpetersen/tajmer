@@ -25,12 +25,11 @@ import { DK_CITIES } from "./cities.js";
 
 const PREVIEW_CONCURRENCY = 8;
 
-// Every ad renders as the standard feed preview (including 9:16). We render the
-// iframe at its native 400px width — where the whole card (header, text, video,
-// link card, reactions) lays out at ~660px tall — then scale it down to fit the
-// column, so nothing is ever clipped.
+// Every ad renders as the standard feed preview (including 9:16) at Meta's
+// native 335px feed width — so the card shows at full size ("zoomed in"), not
+// scaled down. 620px tall covers the card through the link card/CTA.
 const FEED_FORMAT = "MOBILE_FEED_STANDARD";
-const FEED_SIZE = { width: 400, height: 660 };
+const FEED_SIZE = { width: 335, height: 620 };
 
 function version(): string {
   return process.env.META_API_VERSION || "v21.0";
