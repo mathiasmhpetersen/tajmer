@@ -81,3 +81,17 @@ export function guard(req: VercelRequest, res: VercelResponse): Session | null {
   res.status(401).json({ error: "Not authenticated" });
   return null;
 }
+
+/** Valid `Authorization: Bearer <PREVIEW_AGENT_TOKEN>` — for Marketingly's agent. */
+export function agentTokenOk(req: VercelRequest): boolean {
+  const expected = process.env.PREVIEW_AGENT_TOKEN;
+  if (!expected) return false;
+  const header = req.headers.authorization ?? "";
+  const token = header.replace(/^Bearer\s+/i, "").trim();
+  return safeEqual(token, expected);
+}
+
+/** True for an admin cookie OR the agent bearer token. */
+export function isAdminOrAgent(req: VercelRequest): boolean {
+  return getSession(req)?.role === "admin" || agentTokenOk(req);
+}

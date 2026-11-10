@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutGrid, Mic2 } from "lucide-react";
+import { Eye, LayoutGrid, Mic2 } from "lucide-react";
 import { ARTISTS } from "@shared/artists";
 import { cn } from "@/lib/cn";
 import { useIsClient } from "@/lib/session";
@@ -69,6 +69,10 @@ export function Sidebar() {
             <NavItem href="/" active={location === "/"}>
               <LayoutGrid className="size-[18px]" />
               <span>Oversigt</span>
+            </NavItem>
+            <NavItem href="/preview" active={location === "/preview"}>
+              <Eye className="size-[18px]" />
+              <span>Preview</span>
             </NavItem>
           </div>
         </nav>

@@ -13,6 +13,7 @@ import { RoleProvider } from "@/lib/session";
 import { Layout } from "@/components/Layout";
 import { Overview } from "@/pages/Overview";
 import { ArtistPage } from "@/pages/ArtistPage";
+import { Preview } from "@/pages/Preview";
 import { Login } from "@/pages/Login";
 
 const FIVE_MIN = 5 * 60 * 1000;
@@ -86,6 +87,7 @@ function Gate({
       <Layout>
         <Switch>
           <Route path="/" component={Overview} />
+          <Route path="/preview" component={Preview} />
           <Route path="/:slug">{(params) => <ArtistPage slug={params.slug} />}</Route>
         </Switch>
       </Layout>

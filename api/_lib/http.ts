@@ -40,3 +40,17 @@ export function requireEnv(name: string): string {
   if (!value) throw new MetaError(`Mangler miljøvariabel: ${name}`);
   return value;
 }
+
+/** Vercel usually parses JSON bodies; fall back to parsing a raw string. */
+export function readJsonBody(req: VercelRequest): Record<string, unknown> {
+  const raw: unknown = req.body;
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}

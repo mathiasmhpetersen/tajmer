@@ -1,4 +1,12 @@
-import type { ArtistResponse, OverviewResponse, Range, Role, Session } from "@shared/types";
+import type {
+  ApproveItem,
+  ArtistResponse,
+  OverviewResponse,
+  PreviewResponse,
+  Range,
+  Role,
+  Session,
+} from "@shared/types";
 
 /** Thrown on a 401 so React Query can route the app to the login screen. */
 export class UnauthorizedError extends Error {
@@ -43,6 +51,45 @@ export function fetchArtist(
 
 export function fetchSession(): Promise<Session> {
   return getJson<Session>("/api/session");
+}
+
+export function fetchPreview(): Promise<PreviewResponse> {
+  return getJson<PreviewResponse>("/api/preview");
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new UnauthorizedError();
+  const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
+  if (!res.ok || !data || (data as { error?: string }).error) {
+    throw new ApiRequestError(data?.error || `Fejl (HTTP ${res.status})`);
+  }
+  return data as T;
+}
+
+export function approveAd(adId: string, creativeId: string | null, approved: boolean) {
+  return postJson("/api/preview/approve", { adId, creativeId, approved });
+}
+
+export function approveBulk(items: ApproveItem[], approved: boolean) {
+  return postJson("/api/preview/approve", { items, approved });
+}
+
+export function sendFeedback(adId: string, creativeId: string | null, text: string) {
+  return postJson("/api/preview/feedback", { adId, creativeId, text });
+}
+
+export function resolveFeedback(
+  adId: string,
+  feedbackId: string,
+  opts: { note?: string; fixedAdId?: string } = {},
+) {
+  return postJson("/api/preview/feedback/resolve", { adId, feedbackId, ...opts });
 }
 
 export async function login(password: string): Promise<Role> {

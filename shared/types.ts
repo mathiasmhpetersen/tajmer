@@ -103,3 +103,83 @@ export interface OverviewResponse {
 export interface ApiError {
   error: string;
 }
+
+// ---------------------------------------------------------------------------
+// Preview / approval feature
+// ---------------------------------------------------------------------------
+
+/** afventer = awaiting approval, godkendt = approved, rettelser = corrections requested. */
+export type PreviewStatus = "afventer" | "godkendt" | "rettelser";
+
+export const PREVIEW_STATUS_LABEL: Record<PreviewStatus, string> = {
+  afventer: "Afventer godkendelse",
+  godkendt: "Godkendt",
+  rettelser: "Rettelser ønsket",
+};
+
+export interface PreviewFeedbackItem {
+  id: string;
+  text: string;
+  role: Role;
+  createdAt: string;
+  resolved: boolean;
+  resolvedBy?: Role;
+  resolvedAt?: string;
+  /** Optional note from Marketingly shown to the client when resolved. */
+  resolvedNote?: string;
+  /** New ad id this correction was fixed with (links to the replacement ad). */
+  fixedAdId?: string;
+}
+
+export interface PreviewAd {
+  adId: string;
+  adName: string;
+  creativeId: string | null;
+  effectiveStatus: string;
+  adsetName: string;
+  startTime: string | null;
+  endTime: string | null;
+  campaignId: string;
+  campaignName: string;
+  displayName: string;
+  preview: {
+    iframeSrc: string | null;
+    thumbnailUrl: string | null;
+    isVideo: boolean;
+    body: string | null;
+    title: string | null;
+    description: string | null;
+    ctaType: string | null;
+  };
+  status: PreviewStatus;
+  approvedBy?: Role;
+  approvedAt?: string;
+  feedback: PreviewFeedbackItem[];
+  /** Admin only. */
+  adsManagerUrl?: string;
+}
+
+export interface PreviewCampaignGroup {
+  campaignId: string;
+  displayName: string;
+  ads: PreviewAd[];
+}
+
+export interface PreviewArtistGroup {
+  slug: string;
+  name: string;
+  /** Ads in this block that are not yet godkendt. */
+  pendingCount: number;
+  campaigns: PreviewCampaignGroup[];
+}
+
+export interface PreviewResponse {
+  role: Role;
+  artists: PreviewArtistGroup[];
+}
+
+/** One ad reference used by the bulk approve endpoint. */
+export interface ApproveItem {
+  adId: string;
+  creativeId: string | null;
+}
