@@ -10,18 +10,18 @@ import type { BudgetPlanDoc, PlanRowInput, TiltagRowInput } from "../../shared/b
 // Tiltag columns: Artist | Fra | Til | Gentagelse | Titel | Kilde   ("Alle" = every artist)
 
 export const PLAN_CSV = `Artist,Fra,Til,Dagsbudget,Type,Periode,Periodebudget,Note
-Nikolaj Stokholm,01/11/2026,25/12/2026,,hoved,Nov-25/12,60000,
-Mark Le Fevre,01/10/2026,10/12/2026,,hoved,Okt-10/12,27000,Sidste show 10/12
+Nikolaj Stokholm,13/10/2026,04/01/2027,,hoved,13/10-4/1,100000,
+Mark Le Fevre,13/10/2026,10/12/2026,,hoved,13/10-10/12,27000,Sidste show 10/12
 r8Dio,01/11/2026,25/12/2026,,hoved,Nov-25/12,50000,
 r8Dio,26/12/2026,15/02/2027,,hoved,25/12-15/2,10000,
 r8Dio,16/02/2027,30/04/2027,,hoved,15/2-30/4,60000,
 Linda P,01/11/2026,25/12/2026,,hoved,Nov-25/12,100000,
 Linda P,01/01/2027,28/02/2027,,hoved,Jan-Feb,50000,
-Thomas Warberg,01/10/2026,25/12/2026,,hoved,Okt-25/12,75000,
-Thomas Warberg,01/01/2027,28/02/2027,,hoved,Jan-28/2,16000,
+Thomas Warberg,13/10/2026,04/01/2027,,hoved,13/10-4/1,100000,Hævet til 100.000
+Thomas Warberg,05/01/2027,28/02/2027,,hoved,5/1-28/2,16000,
 Thomas Warberg,01/03/2027,31/03/2027,,hoved,Marts,12000,
-Jakob Thrane,01/09/2026,25/12/2026,,hoved,Sep-25/12,100000,
-Jakob Thrane,01/01/2027,15/02/2027,,hoved,Jan-15/2,15000,
+Jakob Thrane,01/09/2026,04/01/2027,,hoved,Sep-4/1,130000,
+Jakob Thrane,05/01/2027,15/02/2027,,hoved,5/1-15/2,15000,
 Jakob Thrane,16/02/2027,31/03/2027,,hoved,15/2-31/3,50000,
 `;
 

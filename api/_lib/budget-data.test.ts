@@ -14,11 +14,11 @@ describe("in-app budget data", () => {
   it("carries the authoritative period budgets", () => {
     const budget = (slug: string, label: string) =>
       periods.find((p) => p.artistSlug === slug && p.label === label)?.periodBudget;
-    expect(budget("nikolaj-stokholm", "Nov-25/12")).toBe(60000);
-    expect(budget("mark-le-fevre", "Okt-10/12")).toBe(27000);
+    expect(budget("nikolaj-stokholm", "13/10-4/1")).toBe(100000);
+    expect(budget("mark-le-fevre", "13/10-10/12")).toBe(27000);
     expect(budget("linda-p", "Nov-25/12")).toBe(100000);
-    expect(budget("thomas-warberg", "Okt-25/12")).toBe(75000);
-    expect(budget("jakob-thrane", "Sep-25/12")).toBe(100000);
+    expect(budget("thomas-warberg", "13/10-4/1")).toBe(100000);
+    expect(budget("jakob-thrane", "Sep-4/1")).toBe(130000);
     expect(budget("r8dio", "15/2-30/4")).toBe(60000);
   });
 
