@@ -35,7 +35,7 @@ export function BudgetOverview() {
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1248, color: BC.text }}>
       <BudgetHeader
-        title="Budget"
+        title="Økonomi"
         subtitle="Planlagt budget mod faktisk forbrug pr. kunstner"
         onRefresh={refresh}
         refreshing={query.isFetching}
@@ -54,7 +54,7 @@ export function BudgetOverview() {
             <AlarmBar
               problem={`${worst.name}: ${worst.tempo.text}`}
               consequence="Budgettet risikerer at løbe tør før periodens slutning."
-              action={{ label: `Åbn ${worst.name}`, href: `/budget/${worst.slug}` }}
+              action={{ label: `Åbn ${worst.name}`, href: `/okonomi/${worst.slug}` }}
             />
           )}
 
@@ -108,7 +108,7 @@ export function BudgetOverview() {
                     return (
                       <tr key={a.slug} style={{ borderBottom: `1px solid ${BC.borderFaint}` }}>
                         <td className="px-4 py-3.5">
-                          <Link href={`/budget/${a.slug}`} className="text-[15px] font-medium hover:underline" style={{ color: BC.text }}>
+                          <Link href={`/okonomi/${a.slug}`} className="text-[15px] font-medium hover:underline" style={{ color: BC.text }}>
                             {a.name}
                           </Link>
                           {a.warningCount > 0 && (

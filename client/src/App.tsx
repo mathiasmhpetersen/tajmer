@@ -91,8 +91,8 @@ function Gate({
             roles (admin additionally gets resolve + Ads Manager). */}
         <Route path="/preview" component={ClientPreview} />
         <Route path="/">{() => <Layout><Overview /></Layout>}</Route>
-        <Route path="/budget">{() => <Layout><BudgetOverview /></Layout>}</Route>
-        <Route path="/budget/:slug">
+        <Route path="/okonomi">{() => <Layout><BudgetOverview /></Layout>}</Route>
+        <Route path="/okonomi/:slug">
           {(params) => (
             <Layout>
               <BudgetArtist slug={params.slug} />

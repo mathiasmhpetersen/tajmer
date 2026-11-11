@@ -12,7 +12,8 @@ import type {
   MetaCampaignBudget,
   PaydayMarker,
 } from "../../shared/budget.js";
-import { fetchCsv } from "./budget-csv.js";
+import { parseCsv } from "./budget-csv.js";
+import { PLAN_CSV, TILTAG_CSV } from "./budget-data.js";
 import {
   addDaysIso,
   artistShowFromEvents,
@@ -59,50 +60,13 @@ interface SheetData {
   warnings: BudgetWarning[];
 }
 
-async function loadSheets(): Promise<SheetData> {
-  const warnings: BudgetWarning[] = [];
-  const planUrl = process.env.PLAN_CSV_URL;
-  const tiltagUrl = process.env.TILTAG_CSV_URL;
-  let planRows: string[][] = [];
-  let tiltagRows: string[][] = [];
-
-  if (!planUrl) {
-    warnings.push({
-      code: "not_configured",
-      category: "ark",
-      message: "PLAN_CSV_URL mangler — budgetdata kan ikke hentes.",
-    });
-  } else {
-    try {
-      planRows = await fetchCsv(planUrl);
-    } catch (e) {
-      warnings.push({
-        code: "sheet_unavailable",
-        category: "ark",
-        message: `Kunne ikke hente Plan-CSV: ${(e as Error).message}`,
-      });
-    }
-  }
-
-  if (!tiltagUrl) {
-    warnings.push({
-      code: "not_configured",
-      category: "ark",
-      message: "TILTAG_CSV_URL mangler — tiltag vises ikke.",
-    });
-  } else {
-    try {
-      tiltagRows = await fetchCsv(tiltagUrl);
-    } catch (e) {
-      warnings.push({
-        code: "sheet_unavailable",
-        category: "ark",
-        message: `Kunne ikke hente Tiltag-CSV: ${(e as Error).message}`,
-      });
-    }
-  }
-
-  return { plan: parsePlan(planRows), tiltag: parseTiltag(tiltagRows), warnings };
+/** Plan + Tiltag live in the app (api/_lib/budget-data.ts) — no external source. */
+function loadData(): SheetData {
+  return {
+    plan: parsePlan(parseCsv(PLAN_CSV)),
+    tiltag: parseTiltag(parseCsv(TILTAG_CSV)),
+    warnings: [],
+  };
 }
 
 interface MetaData {
@@ -230,7 +194,7 @@ function eventsForArtist(events: BudgetEvent[], slug: string): BudgetEvent[] {
 export async function buildArtistBudget(slug: string): Promise<ArtistBudget> {
   const artist = ARTISTS_BY_SLUG[slug];
   const today = todayIso();
-  const { plan, tiltag, warnings: sheetWarnings } = await loadSheets();
+  const { plan, tiltag, warnings: sheetWarnings } = loadData();
 
   const periods = plan.periods.filter((p) => p.artistSlug === slug);
   const events = eventsForArtist(tiltag.events, slug);
@@ -288,7 +252,7 @@ export async function buildArtistBudget(slug: string): Promise<ArtistBudget> {
 
 export async function buildBudgetOverview(): Promise<BudgetOverviewResponse> {
   const today = todayIso();
-  const { plan, tiltag, warnings: sheetWarnings } = await loadSheets();
+  const { plan, tiltag, warnings: sheetWarnings } = loadData();
 
   const window = planWindow(plan.periods);
   const { spend, campaigns, adsets, warnings: metaWarnings } = await loadMeta(window.from, window.to);

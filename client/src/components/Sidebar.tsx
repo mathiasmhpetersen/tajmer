@@ -76,11 +76,11 @@ export function Sidebar() {
             </NavItem>
             {!isClient && (
               <NavItem
-                href="/budget"
-                active={location === "/budget" || location.startsWith("/budget/")}
+                href="/okonomi"
+                active={location === "/okonomi" || location.startsWith("/okonomi/")}
               >
                 <Wallet className="size-[18px]" />
-                <span>Budget</span>
+                <span>Økonomi</span>
               </NavItem>
             )}
           </div>
