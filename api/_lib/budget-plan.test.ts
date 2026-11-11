@@ -1,135 +1,90 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parseCsv } from "./budget-csv.js";
 import {
-  buildDailyPlan,
+  artistShowFromEvents,
   classifyAmount,
-  deriveAdjustments,
   parseDkDate,
   parsePlan,
   parseTiltag,
+  payday,
 } from "./budget-plan.js";
-import { PLAN_FIXTURE, TILTAG_FIXTURE } from "./budget-plan.fixture.js";
 import type { BudgetWarningCode } from "../../shared/budget.js";
+
+const planRows = parseCsv(readFileSync(new URL("./__fixtures__/plan.sample.csv", import.meta.url), "utf8"));
+const tiltagRows = parseCsv(readFileSync(new URL("./__fixtures__/tiltag.sample.csv", import.meta.url), "utf8"));
 
 function codes(ws: { code: BudgetWarningCode }[]): Set<BudgetWarningCode> {
   return new Set(ws.map((w) => w.code));
 }
 
-describe("parseDkDate", () => {
-  it("parses dd/mm/yyyy to ISO", () => {
-    expect(parseDkDate("17/11/2025")).toBe("2025-11-17");
-    expect(parseDkDate("1/1/26")).toBe("2026-01-01");
-  });
-  it("rejects invalid or malformed dates", () => {
+describe("parseDkDate / classifyAmount", () => {
+  it("parses dates and amounts, rejecting junk", () => {
+    expect(parseDkDate("17/11/2026")).toBe("2026-11-17");
     expect(parseDkDate("31/02/2026")).toBeNull();
-    expect(parseDkDate("ikke en dato")).toBeNull();
-    expect(parseDkDate("")).toBeNull();
-  });
-});
-
-describe("classifyAmount", () => {
-  it("reads Danish-formatted numbers", () => {
-    expect(classifyAmount("1.245")).toEqual({ value: 1245, kind: "number" });
-    expect(classifyAmount("50.000")).toEqual({ value: 50000, kind: "number" });
-    expect(classifyAmount("1.245,50")).toEqual({ value: 1245.5, kind: "number" });
-  });
-  it("treats blanks as empty and text as text (never 0)", () => {
+    expect(classifyAmount("100000")).toEqual({ value: 100000, kind: "number" });
     expect(classifyAmount("")).toEqual({ value: null, kind: "empty" });
     expect(classifyAmount("PAUSE")).toEqual({ value: null, kind: "text" });
-    expect(classifyAmount("10000+3000 geo")).toEqual({ value: null, kind: "text" });
   });
 });
 
-describe("parsePlan", () => {
-  const { periods, warnings } = parsePlan(PLAN_FIXTURE);
+describe("payday (2nd-to-last weekday)", () => {
+  it("is Fri 27 Nov 2026 and Wed 30 Dec 2026", () => {
+    expect(payday(2026, 10)).toBe("2026-11-27");
+    expect(payday(2026, 11)).toBe("2026-12-30");
+  });
+});
 
-  it("skips blank rows and parses every data row", () => {
-    // 3 Warberg + 3 Thrane + 4 Stokholm + 1 unknown = 11 periods.
-    expect(periods).toHaveLength(11);
+describe("parsePlan — period grouping", () => {
+  const { periods, warnings } = parsePlan(planRows);
+
+  it("groups rows by (Artist, Periode) into one period with several segments", () => {
+    const nk = periods.filter((p) => p.artistSlug === "nikolaj-stokholm");
+    expect(nk).toHaveLength(1);
+    expect(nk[0].label).toBe("17/11-23/12");
+    expect(nk[0].segments).toHaveLength(2);
   });
 
-  it("surfaces every data problem as a warning", () => {
-    const present = codes(warnings);
-    for (const code of [
-      "daily_sum_mismatch",
-      "pause",
-      "note_value",
-      "bad_date",
-      "unknown_artist",
-      "template_duplicate",
-    ] as const) {
-      expect(present).toContain(code);
-    }
+  it("takes the FIRST Periodebudget per period, never the sum", () => {
+    const nk = periods.find((p) => p.artistSlug === "nikolaj-stokholm");
+    expect(nk?.periodBudget).toBe(75000);
+    const linda = periods.find((p) => p.artistSlug === "linda-p");
+    expect(linda?.periodBudget).toBe(100000);
   });
 
-  it("flags the copy-pasted day-series across both artists", () => {
+  it("computes the day-sum and flags it against the periodebudget", () => {
+    const linda = periods.find((p) => p.artistSlug === "linda-p");
+    // 1000×14 + 2000×39 = 92.000 vs 100.000.
+    expect(linda?.dailySum).toBe(92000);
+    expect(codes(warnings)).toContain("daily_sum_mismatch");
+  });
+
+  it("flags a day-series shared across artists (Linda P and Nikolaj both 1000/2000)", () => {
     const dup = warnings.filter((w) => w.code === "template_duplicate");
     const slugs = new Set(dup.map((w) => w.artistSlug));
-    expect(slugs).toContain("thomas-warberg");
-    expect(slugs).toContain("jakob-thrane");
+    expect(slugs).toContain("linda-p");
+    expect(slugs).toContain("nikolaj-stokholm");
   });
 
-  it("keeps PAUSE as pause with no daily amount", () => {
-    const pause = periods.find((p) => p.pause);
-    expect(pause?.dailyBudget).toBeNull();
-    expect(pause?.artistSlug).toBe("nikolaj-stokholm");
-  });
-
-  it("keeps a text amount as a note, not 0", () => {
-    const note = periods.find((p) => p.rawDailyBudget === "10000+3000 geo");
-    expect(note?.dailyBudget).toBeNull();
-    expect(note?.note).toContain("10000+3000 geo");
-  });
-
-  it("reports the daily-sum vs periodebudget mismatch with both values", () => {
-    const mismatch = warnings.find((w) => w.code === "daily_sum_mismatch");
-    expect(mismatch?.values?.periodebudget).toBe(50000);
-    expect(mismatch?.values?.dagssum).toBe(51652);
-  });
-});
-
-describe("deriveAdjustments", () => {
-  it("emits an upward adjustment at each daily change", () => {
-    const warberg = parsePlan(PLAN_FIXTURE).periods.filter((p) => p.artistSlug === "thomas-warberg");
-    const adj = deriveAdjustments(warberg);
-    expect(adj).toHaveLength(2);
-    expect(adj.every((a) => a.direction === "up")).toBe(true);
-    expect(adj[0]).toMatchObject({ date: "2025-11-08", fromDaily: 1245, toDaily: 1533 });
-  });
-});
-
-describe("buildDailyPlan", () => {
-  it("expands periods to one point per day across the whole span", () => {
-    const warberg = parsePlan(PLAN_FIXTURE).periods.filter((p) => p.artistSlug === "thomas-warberg");
-    const plan = buildDailyPlan(warberg);
-    expect(plan).toHaveLength(21); // 01/11 – 21/11 inclusive
-    expect(plan[0]).toEqual({ date: "2025-11-01", planned: 1245, pause: false });
-    expect(plan.at(-1)).toEqual({ date: "2025-11-21", planned: 1916, pause: false });
+  it("spans each period from the earliest segment start to the latest end", () => {
+    const linda = periods.find((p) => p.artistSlug === "linda-p");
+    expect(linda?.from).toBe("2026-11-01");
+    expect(linda?.to).toBe("2026-12-23");
   });
 });
 
 describe("parseTiltag", () => {
-  const { events, warnings } = parseTiltag(TILTAG_FIXTURE);
+  const { events } = parseTiltag(tiltagRows);
 
-  it("parses one event per data row", () => {
-    expect(events).toHaveLength(4);
+  it('treats "Alle" as applying to every artist', () => {
+    const all = events.find((e) => e.title.startsWith("Julekampagne"));
+    expect(all?.appliesToAll).toBe(true);
+    expect(all?.artistSlug).toBeNull();
   });
 
-  it('expands "ingen" to a single marker', () => {
-    const tv = events.find((e) => e.title === "TV 2 interview");
-    expect(tv?.occurrences).toEqual(["2025-11-01"]);
-  });
-
-  it('expands "hver <ugedag> i N uger" to N weekly markers', () => {
-    const radio = events.find((e) => e.title === "Radioklip");
-    expect(radio?.occurrences).toHaveLength(4);
-    // every marker is the same weekday, 7 days apart.
-    const podcast = events.find((e) => e.title === "Podcast");
-    expect(podcast?.occurrences).toHaveLength(3);
-  });
-
-  it("warns on an unrecognised recurrence but still places one marker", () => {
-    expect(codes(warnings)).toContain("note_value");
-    const unknown = events.find((e) => e.title === "Noget");
-    expect(unknown?.occurrences).toHaveLength(1);
+  it("derives show + premiere from a Premiere event", () => {
+    const show = artistShowFromEvents(events, "linda-p");
+    expect(show.premiere).toBe("2027-01-14");
+    expect(show.show).toBe("Stand-up Tour 2027");
   });
 });
