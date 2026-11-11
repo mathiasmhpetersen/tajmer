@@ -1,0 +1,19 @@
+Artist,Fra,Til,Dagsbudget,Type,Periode,Periodebudget,Note
+Linda P,01/11/2026,14/11/2026,1000,hoved,17/11-25/12,100000,"Dagstal findes kun til 23/12 og summer til 92.000 mod 100.000 i Oversigt. Afklares."
+Linda P,15/11/2026,23/12/2026,2000,hoved,17/11-25/12,100000,
+Jakob Thrane,01/11/2026,30/11/2026,1000,hoved,Sep-25/12,100000,"Dagstal for sep-dec summer til 84.500 mod 100.000 i Oversigt. Afklares."
+Jakob Thrane,01/12/2026,25/12/2026,1500,hoved,Sep-25/12,100000,
+Nikolaj Stokholm,01/11/2026,29/11/2026,1000,hoved,17/11-23/12,75000,"Tre tal for samme periode: 75.000 i Oversigt, 61.000 i dagstallene, 50.000 i en kopieret blok nederst i fanen. Afklares."
+Nikolaj Stokholm,30/11/2026,23/12/2026,2000,hoved,17/11-23/12,75000,
+Mark Le Fevre,17/11/2026,24/11/2026,750,hoved,17/11-23/12,40000,"Dagstal summer til 39.600 mod 40.000. Men sidste show er 10/12, så budget efter den dato bor afklares. 01/11-16/11 mangler i arket."
+Mark Le Fevre,25/11/2026,09/12/2026,900,hoved,17/11-23/12,40000,
+Mark Le Fevre,10/12/2026,17/12/2026,1200,hoved,17/11-23/12,40000,
+Mark Le Fevre,18/12/2026,23/12/2026,1600,hoved,17/11-23/12,40000,
+r8Dio,17/11/2026,24/11/2026,958,hoved,17/11-25/12,50000,"Dagstal summer til 51.632 mod 50.000. Stemmer stort set. Den forste blok i fanen er tom."
+r8Dio,25/11/2026,08/12/2026,1245,hoved,17/11-25/12,50000,
+r8Dio,09/12/2026,17/12/2026,1533,hoved,17/11-25/12,50000,
+r8Dio,18/12/2026,23/12/2026,1916,hoved,17/11-25/12,50000,
+Thomas Warberg,01/11/2026,19/11/2026,500,hoved,Okt-25/12,75000,"Dagstal for okt-dec summer til 60.100. Oversigt har bade 75.000 og 100.000 for samme periode. Afklares."
+Thomas Warberg,20/11/2026,28/11/2026,1000,hoved,Okt-25/12,75000,
+Thomas Warberg,29/11/2026,18/12/2026,1500,hoved,Okt-25/12,75000,
+Thomas Warberg,19/12/2026,23/12/2026,1000,hoved,Okt-25/12,75000,

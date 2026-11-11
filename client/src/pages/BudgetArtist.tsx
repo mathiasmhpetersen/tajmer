@@ -1,24 +1,21 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { ARTISTS_BY_SLUG } from "@shared/artists";
 import { fetchArtistBudget } from "@/lib/api";
 import { useIsClient } from "@/lib/session";
-import { formatMoney, formatMoneyWhole } from "@/lib/format";
-import { cn } from "@/lib/cn";
-import { ddmm, ddmmyyyy, deriveArtistSummary, todayIso } from "@/lib/budget";
-import { PageHeader } from "@/components/PageHeader";
-import { KpiCard } from "@/components/ui/KpiCard";
-import { Button } from "@/components/ui/Button";
-import { EmptyState, ErrorState } from "@/components/States";
-import { PaceChip, ProgressBar, WarningChips } from "@/components/budget/BudgetBits";
-import { BudgetChart, type ChartPoint } from "@/components/budget/BudgetChart";
+import { formatMoneyWhole } from "@/lib/format";
+import { BC, ddmm, longDate, TEMPO_HEX } from "@/lib/budget";
+import { AlarmBar, KpiTile, WarningList } from "@/components/budget/BudgetBits";
+import { BudgetChart } from "@/components/budget/BudgetChart";
+import { RefreshButton, SegControl, nf } from "@/components/budget/BudgetShell";
 import { AdminOnly } from "./BudgetOverview";
 
 export function BudgetArtist({ slug }: { slug: string }) {
   const isClient = useIsClient();
   const known = ARTISTS_BY_SLUG[slug];
+  const [scope, setScope] = useState("aftalt");
+  const [suggested, setSuggested] = useState(false);
   const forceRef = useRef(false);
 
   const query = useQuery({
@@ -39,9 +36,9 @@ export function BudgetArtist({ slug }: { slug: string }) {
   if (isClient) return <AdminOnly />;
   if (!known) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Ukendt kunstner</h1>
-        <Link href="/budget" className="mt-5 text-sm text-accent hover:underline">
+      <div className="flex flex-col items-center justify-center py-24 text-center" style={{ color: BC.text }}>
+        <h1 className="text-2xl font-semibold">Ukendt kunstner</h1>
+        <Link href="/budget" className="mt-5 text-sm hover:underline" style={{ color: BC.orange }}>
           Tilbage til budget
         </Link>
       </div>
@@ -49,266 +46,213 @@ export function BudgetArtist({ slug }: { slug: string }) {
   }
 
   const b = query.data;
-  const today = todayIso();
-  const summary = b ? deriveArtistSummary(b) : null;
-
-  const spendByDate = new Map((b?.dailySpend ?? []).map((p) => [p.date, p.spend]));
-  const points: ChartPoint[] = (b?.dailyPlan ?? []).map((d) => ({
-    date: d.date,
-    planned: d.planned,
-    spend: d.date <= today ? (spendByDate.get(d.date) ?? 0) : null,
-    pause: d.pause,
-  }));
-  const chartEvents = (b?.events ?? []).flatMap((e) =>
-    e.occurrences.map((date) => ({ date, title: e.title })),
-  );
-
-  const nextAdj =
-    b?.adjustments
-      .filter((a) => a.date && a.date >= today)
-      .sort((x, y) => ((x.date as string) < (y.date as string) ? -1 : 1))[0] ?? null;
-
-  const upcoming = (b?.events ?? [])
-    .map((e) => ({
-      e,
-      next: [...e.occurrences].filter((d) => d >= today).sort()[0] ?? null,
-    }))
-    .filter((x) => x.next)
-    .sort((a, z) => ((a.next as string) < (z.next as string) ? -1 : 1));
+  const calc = b?.calc;
+  const red = calc?.tempo.status === "critical";
+  const suggestBelob = b?.suggestion.rows.find((r) => r.current)?.perDag ?? calc?.skalPrDag ?? null;
+  const currentPeriod = b?.periods.find((p) => p.label === b.currentPeriodLabel) ?? null;
 
   return (
-    <div>
-      <PageHeader
-        dateline={
-          <Link href="/budget" className="inline-flex items-center gap-1 text-muted hover:text-ink">
-            <ArrowLeft className="size-3.5" /> Budget
+    <div className="mx-auto w-full" style={{ maxWidth: 1248, color: BC.text }}>
+      {/* header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <Link href="/budget" className="inline-flex items-center gap-1 text-[13px] hover:underline" style={{ color: BC.textGrey }}>
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
+              <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="m15 18-6-6 6-6" />
+            </svg>
+            Budget
           </Link>
-        }
-        title={known.name}
-        actions={
-          <Button variant="ghost" size="sm" loading={query.isFetching} onClick={refresh}>
-            {!query.isFetching && <RefreshCw className="size-3.5" />} Opdater nu
-          </Button>
-        }
-      />
-
-      {query.isError ? (
-        <ErrorState message={(query.error as Error).message} onRetry={refresh} />
-      ) : query.isLoading || !b || !summary ? (
-        <div className="h-72 animate-pulse rounded-card border border-hairline bg-card" />
-      ) : (
-        <div className="flex flex-col gap-10">
-          {/* KPI row */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiCard
-              label="Periodebudget"
-              value={summary.periodBudget != null ? formatMoneyWhole(summary.periodBudget) : "—"}
-              helper={
-                summary.current
-                  ? `${ddmm(summary.current.from)}–${ddmm(summary.current.to)}`
-                  : "Ingen aktiv periode"
-              }
-              tone="accent"
-            />
-            <KpiCard label="Brugt" value={formatMoneyWhole(summary.spentInPeriod)} helper="I perioden" />
-            <KpiCard
-              label="Resterende"
-              value={summary.remaining != null ? formatMoneyWhole(summary.remaining) : "—"}
-              helper={summary.remaining != null && summary.remaining < 0 ? "Overforbrug" : undefined}
-            />
-            <div className="flex flex-col justify-between rounded-card border border-hairline bg-card p-5">
-              <span className="text-sm text-muted">Tempo</span>
-              <div className="mt-5">
-                <PaceChip status={summary.status} pct={summary.tempoPct} />
-              </div>
-              <p className="mt-2 text-[13px] text-muted">
-                {summary.expectedToDate != null
-                  ? `Forventet ${formatMoneyWhole(summary.expectedToDate)} til dato`
-                  : "Ingen pace-data"}
-              </p>
+          <div className="mt-2 flex items-center gap-3">
+            <span
+              className="flex size-11 items-center justify-center rounded-[12px] text-[15px] font-semibold"
+              style={{ background: "rgba(255,255,255,0.06)", color: BC.textDim }}
+            >
+              {initials(known.name)}
+            </span>
+            <div>
+              <h1 className="text-[32px] font-semibold leading-none" style={{ letterSpacing: "-0.025em", color: BC.text }}>
+                {known.name}
+              </h1>
+              {b && (b.show.show || b.show.premiere) && (
+                <div className="mt-1 text-[13px]" style={{ color: BC.textGrey }}>
+                  {b.show.show}
+                  {b.show.show && b.show.premiere ? " · " : ""}
+                  {b.show.premiere ? `premiere ${longDate(b.show.premiere)}` : ""}
+                </div>
+              )}
             </div>
           </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <SegControl value={scope} onChange={setScope} />
+          <RefreshButton onClick={refresh} loading={query.isFetching} />
+        </div>
+      </div>
 
-          {/* progress */}
-          {summary.periodBudget != null && (
-            <div className="rounded-card border border-hairline bg-card p-5">
-              <div className="mb-3 flex items-baseline justify-between text-sm">
-                <span className="text-muted">Forbrug i nuværende periode</span>
-                <span className="tnum text-muted">
-                  {formatMoney(summary.spentInPeriod)} / {formatMoneyWhole(summary.periodBudget)}
-                </span>
-              </div>
-              <ProgressBar value={summary.spentInPeriod} max={summary.periodBudget} />
-            </div>
+      {query.isError ? (
+        <div className="mt-6 text-[14px]" style={{ color: BC.red }}>
+          {(query.error as Error).message}
+        </div>
+      ) : query.isLoading || !b || !calc ? (
+        <div className="mt-10 h-80 animate-pulse rounded-[14px]" style={{ background: BC.card, border: `1px solid ${BC.border}` }} />
+      ) : (
+        <div className="mt-8 flex flex-col" style={{ gap: 40 }}>
+          {red && (
+            <AlarmBar
+              problem={`${known.name}: ${calc.tempo.text}`}
+              consequence={calc.tomDato ? `Pengene er brugt omkring ${ddmm(calc.tomDato)} hvis intet ændres.` : "Forbruget ligger over planen."}
+              action={
+                suggestBelob != null
+                  ? { label: suggested ? "Forslag noteret ✓" : `Foreslå ${nf(suggestBelob)} kr. i Meta`, onClick: () => setSuggested(true) }
+                  : undefined
+              }
+            />
           )}
+
+          {/* KPIs */}
+          <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+            <KpiTile label="Aftalt" value={calc.aftalt != null ? formatMoneyWhole(calc.aftalt) : "—"} context={currentPeriod ? `${ddmm(calc.from)}–${ddmm(calc.to)}` : "Ingen aktiv periode"} accent />
+            <KpiTile label="Brugt" value={formatMoneyWhole(calc.brugt)} context="Til og med i går" />
+            <KpiTile label="Resterende" value={calc.rest != null ? formatMoneyWhole(calc.rest) : "—"} context={`Skal bruge ${calc.skalPrDag != null ? nf(calc.skalPrDag) : "—"} kr./dag`} />
+            <KpiTile
+              label="Tempo"
+              value={calc.afvigelse != null ? `${calc.afvigelse >= 0 ? "+" : ""}${Math.round(calc.afvigelse)} pt` : "—"}
+              color={TEMPO_HEX[calc.tempo.status]}
+              context={<span style={{ color: TEMPO_HEX[calc.tempo.status] }}>{calc.tempo.text}</span>}
+            />
+          </div>
 
           {/* chart */}
           <section>
-            <h2 className="mb-4 text-lg font-semibold tracking-tight">Dagsbudget mod forbrug</h2>
-            {points.length > 0 ? (
-              <div className="rounded-card border border-hairline bg-card p-5">
-                <BudgetChart points={points} events={chartEvents} today={today} />
+            <SectionTitle>Dagligt forbrug mod det, der er råd til</SectionTitle>
+            {calc.from && calc.to ? (
+              <div className="rounded-[14px] p-6" style={{ background: BC.card, border: `1px solid ${BC.border}` }}>
+                <BudgetChart
+                  from={calc.from}
+                  to={calc.to}
+                  today={new Date().toISOString().slice(0, 10)}
+                  dailySpend={b.dailySpend}
+                  koererNu={calc.koererNu.amount}
+                  skalPrDag={calc.skalPrDag}
+                  tomDato={calc.tomDato}
+                  paydays={b.paydays}
+                />
               </div>
             ) : (
-              <EmptyState message="Ingen budgetperioder i planen endnu." />
+              <EmptyPlan />
             )}
           </section>
 
-          {/* next adjustment + adjustments table */}
-          <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-            <section>
-              <h2 className="mb-4 text-lg font-semibold tracking-tight">Næste justering</h2>
-              <div className="rounded-card border border-hairline bg-card p-5">
-                {nextAdj ? (
-                  <>
-                    <div className="text-sm text-muted">{ddmmyyyy(nextAdj.date)}</div>
-                    <div className="mt-3 flex items-center gap-3">
-                      <span className="tnum text-xl font-semibold">
-                        {nextAdj.fromDaily != null ? formatMoneyWhole(nextAdj.fromDaily) : "—"}
-                      </span>
-                      <DirArrow dir={nextAdj.direction} />
-                      <span
-                        className={cn(
-                          "tnum text-xl font-semibold",
-                          nextAdj.direction === "up"
-                            ? "text-success"
-                            : nextAdj.direction === "down"
-                              ? "text-warning"
-                              : "text-ink",
-                        )}
-                      >
-                        {nextAdj.toDaily != null ? formatMoneyWhole(nextAdj.toDaily) : "—"}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[13px] text-muted">Dagligt budget</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted">Ingen planlagte justeringer.</p>
-                )}
-              </div>
-            </section>
-
-            <section>
-              <h2 className="mb-4 text-lg font-semibold tracking-tight">Alle justeringer</h2>
-              {b.adjustments.length > 0 ? (
-                <div className="overflow-hidden rounded-card border border-hairline">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-hairline bg-card text-left text-[12px] uppercase tracking-wide text-faint">
-                        <th className="px-4 py-2.5 font-medium">Dato</th>
-                        <th className="px-4 py-2.5 text-right font-medium">Fra</th>
-                        <th className="px-4 py-2.5 text-right font-medium">Til</th>
-                        <th className="px-4 py-2.5 text-right font-medium">Retning</th>
+          {/* two columns */}
+          <div className="flex flex-wrap gap-6">
+            <section style={{ flex: "999 1 560px", minWidth: 0 }}>
+              <SectionTitle>Forslag til resten af perioden</SectionTitle>
+              <div className="overflow-hidden rounded-[14px]" style={{ background: BC.card, border: `1px solid ${BC.border}` }}>
+                <table className="w-full text-left">
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${BC.border}` }}>
+                      {["Periode", "Hvorfor", "Pr. dag"].map((h, i) => (
+                        <th key={h} scope="col" className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: BC.textGrey, textAlign: i === 2 ? "right" : "left" }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b.suggestion.rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-4 text-[14px]" style={{ color: BC.textGrey }}>
+                          Ingen resterende dage i perioden.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {b.adjustments.map((a, i) => (
-                        <tr key={i} className="border-b border-hairline last:border-0">
-                          <td className="px-4 py-2.5">{ddmmyyyy(a.date)}</td>
-                          <td className="tnum px-4 py-2.5 text-right text-muted">
-                            {a.fromDaily != null ? formatMoneyWhole(a.fromDaily) : "—"}
+                    ) : (
+                      b.suggestion.rows.map((r, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${BC.borderFaint}` }}>
+                          <td className="tnum px-4 py-3 text-[14px]" style={{ color: r.current ? BC.orange : BC.text, fontWeight: r.current ? 600 : 400 }}>
+                            {ddmm(r.from)}–{ddmm(r.to)}
                           </td>
-                          <td className="tnum px-4 py-2.5 text-right">
-                            {a.toDaily != null ? formatMoneyWhole(a.toDaily) : "—"}
+                          <td className="px-4 py-3 text-[14px]" style={{ color: r.current ? BC.orange : BC.textDim, fontWeight: r.current ? 600 : 400 }}>
+                            {r.why}
                           </td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex justify-end">
-                              <DirArrow dir={a.direction} />
-                            </div>
+                          <td className="tnum px-4 py-3 text-right text-[14px]" style={{ color: r.current ? BC.orange : BC.text, fontWeight: r.current ? 600 : 400 }}>
+                            {nf(r.perDag)} kr.
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      ))
+                    )}
+                  </tbody>
+                  {b.suggestion.rest != null && (
+                    <tfoot>
+                      <tr style={{ borderTop: `1px solid ${BC.border}` }}>
+                        <td className="px-4 py-3 text-[13px] uppercase tracking-[0.06em]" style={{ color: BC.textGrey }} colSpan={2}>
+                          Total (= resterende)
+                        </td>
+                        <td className="tnum px-4 py-3 text-right text-[14px] font-semibold">{formatMoneyWhole(b.suggestion.rest)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              {currentPeriod?.note && (
+                <div className="mt-3 rounded-[12px] p-3.5 text-[13px]" style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${BC.borderFaint}`, color: BC.textGrey }}>
+                  <span className="font-medium" style={{ color: BC.textDim }}>Note: </span>
+                  {currentPeriod.note}
                 </div>
-              ) : (
-                <p className="text-sm text-muted">Ingen justeringer i planen.</p>
               )}
             </section>
-          </div>
 
-          {/* period timeline */}
-          <section>
-            <h2 className="mb-4 text-lg font-semibold tracking-tight">Perioder</h2>
-            <div className="flex flex-col gap-2">
-              {b.periods.map((p, i) => {
-                const current = Boolean(p.from && p.to && p.from <= today && p.to >= today);
-                return (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
-                      current ? "border-accent/60 bg-card" : "border-hairline bg-card/60",
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="tnum text-sm font-medium">
-                        {ddmm(p.from)}–{ddmm(p.to)}
-                      </span>
-                      {current && (
-                        <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent">
-                          Nu
-                        </span>
-                      )}
-                      {p.type && <span className="text-[12px] text-faint">{p.type}</span>}
-                      {p.pause && (
-                        <span className="rounded-full bg-card-2 px-2 py-0.5 text-[11px] text-faint">
-                          pause
-                        </span>
-                      )}
-                    </div>
-                    <div className="tnum flex items-center gap-4 text-sm">
-                      <span className="text-muted">
-                        {p.dailyBudget != null ? `${formatMoneyWhole(p.dailyBudget)}/dag` : p.note || "—"}
-                      </span>
-                      <span className="text-ink">
-                        {p.periodBudget != null ? formatMoneyWhole(p.periodBudget) : "—"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {b.periods.length === 0 && <p className="text-sm text-muted">Ingen perioder.</p>}
-            </div>
-          </section>
+            <section style={{ flex: "1 1 320px", minWidth: 0 }}>
+              <SectionTitle>Perioder</SectionTitle>
+              <ol className="relative flex flex-col gap-4 pl-5">
+                {b.periods.map((p, i) => {
+                  const current = p.label === b.currentPeriodLabel;
+                  return (
+                    <li key={i} className="relative">
+                      <span className="absolute -left-5 top-1 size-2.5 rounded-full" style={{ background: current ? BC.orange : BC.textFaint }} />
+                      <div className="text-[14px] font-medium" style={{ color: current ? BC.text : BC.textGrey }}>
+                        {p.label}
+                      </div>
+                      <div className="tnum text-[13px]" style={{ color: BC.textGrey }}>
+                        {ddmm(p.from)}–{ddmm(p.to)} · {p.periodBudget != null ? `${nf(p.periodBudget)} kr.` : "—"}
+                      </div>
+                    </li>
+                  );
+                })}
+                {b.periods.length === 0 && (
+                  <p className="text-[13px]" style={{ color: BC.textGrey }}>
+                    Ingen perioder.
+                  </p>
+                )}
+              </ol>
 
-          {/* upcoming events */}
-          {upcoming.length > 0 && (
-            <section>
-              <h2 className="mb-4 text-lg font-semibold tracking-tight">Kommende tiltag</h2>
-              <ul className="flex flex-col gap-2">
-                {upcoming.map(({ e, next }, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-card px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="size-2 shrink-0 rounded-full bg-accent" />
-                      <span className="font-medium">{e.title}</span>
-                      {e.source && <span className="text-[12px] text-faint">{e.source}</span>}
-                    </div>
-                    <span className="tnum text-sm text-muted">{ddmmyyyy(next)}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-8">
+                <SectionTitle>Advarsler{b.warnings.length > 0 ? ` (${b.warnings.length})` : ""}</SectionTitle>
+                <WarningList warnings={b.warnings} />
+              </div>
             </section>
-          )}
-
-          {/* warnings */}
-          <section>
-            <h2 className="mb-3 text-lg font-semibold tracking-tight">
-              Advarsler{b.warnings.length > 0 ? ` (${b.warnings.length})` : ""}
-            </h2>
-            <WarningChips warnings={b.warnings} />
-          </section>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function DirArrow({ dir }: { dir: "up" | "down" | "none" }) {
-  if (dir === "up") return <ArrowUp className="size-4 text-success" />;
-  if (dir === "down") return <ArrowDown className="size-4 text-warning" />;
-  return <ArrowRight className="size-4 text-faint" />;
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mb-4 text-[17px] font-semibold" style={{ color: BC.text }}>
+      {children}
+    </h2>
+  );
+}
+
+function EmptyPlan() {
+  return (
+    <div className="rounded-[14px] p-10 text-center text-[14px]" style={{ background: BC.card, border: `1px dashed ${BC.border}`, color: BC.textGrey }}>
+      Ingen plan indlæst endnu.
+    </div>
+  );
+}
+
+function initials(name: string): string {
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }

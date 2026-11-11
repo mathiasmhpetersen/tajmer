@@ -341,6 +341,34 @@ export async function fetchCampaignDailyBudgets(): Promise<CampaignDailyBudget[]
   }));
 }
 
+interface RawAdset {
+  id: string;
+  campaign_id?: string;
+  daily_budget?: string;
+  effective_status: string;
+}
+
+export interface AdsetDailyBudget {
+  adsetId: string;
+  campaignId: string | null;
+  dailyBudget: number | null; // kr
+  status: string;
+}
+
+/** Ad-set daily budgets — used when a campaign's budget lives on its ad sets. */
+export async function fetchAdsetDailyBudgets(): Promise<AdsetDailyBudget[]> {
+  const rows = await graphGetAll<RawAdset>(account() + "/adsets", {
+    fields: "id,campaign_id,daily_budget,effective_status",
+    limit: "500",
+  });
+  return rows.map((r) => ({
+    adsetId: r.id,
+    campaignId: r.campaign_id ?? null,
+    dailyBudget: r.daily_budget ? Number(r.daily_budget) / 100 : null,
+    status: r.effective_status,
+  }));
+}
+
 async function fetchCreative(adId: string): Promise<RawCreative> {
   const data = await graphGet<{ creative?: RawCreative }>(adId, {
     fields:
