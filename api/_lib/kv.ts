@@ -6,6 +6,7 @@ import type {
   PreviewFeedbackItem,
   Role,
 } from "../../shared/types.js";
+import type { BudgetPlanDoc } from "../../shared/budget.js";
 
 /** env var names that look KV/Redis-related, for diagnostics (names only). */
 function kvEnvNames(): string[] {
@@ -72,6 +73,21 @@ function requireKv(): Redis {
   const client = kv();
   if (!client) throw new KVError();
   return client;
+}
+
+// --- Økonomi: the editable budget plan (admin edits in-app, saved here) ------
+
+const BUDGET_DOC_KEY = "budget:plan:v1";
+
+/** The saved budget doc, or null when nothing has been saved (→ use the seed). */
+export async function readBudgetDoc(): Promise<BudgetPlanDoc | null> {
+  const client = kv();
+  if (!client) return null;
+  return (await client.get<BudgetPlanDoc>(BUDGET_DOC_KEY)) ?? null;
+}
+
+export async function writeBudgetDoc(doc: BudgetPlanDoc): Promise<void> {
+  await requireKv().set(BUDGET_DOC_KEY, doc);
 }
 
 export interface ApprovalRecord {

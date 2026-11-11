@@ -1,3 +1,6 @@
+import { parseCsv } from "./budget-csv.js";
+import type { BudgetPlanDoc, PlanRowInput, TiltagRowInput } from "../../shared/budget.js";
+
 // Budget plan + tiltag now live in the app (no Google Sheets). Edit these here;
 // each is the same simple layout the parsers already understand. Amounts are
 // whole kroner. One row per period with Periodebudget filled and Dagsbudget left
@@ -28,3 +31,50 @@ Mark Le Fevre,10/12/2026,10/12/2026,ingen,Sidste show i turnéen,Kundeprofil
 Linda P,14/01/2027,14/01/2027,ingen,Premiere - Stand-up Tour 2027,Annoncetekst
 Jakob Thrane,13/03/2027,13/03/2027,ingen,Premiere - Står bare og blomstrer,Annoncetekst
 `;
+
+const PLAN_HEADER = ["Artist", "Fra", "Til", "Dagsbudget", "Type", "Periode", "Periodebudget", "Note"];
+const TILTAG_HEADER = ["Artist", "Fra", "Til", "Gentagelse", "Titel", "Kilde"];
+
+/** Editable rows (BudgetPlanDoc) → the string[][] grid the parsers consume. */
+export function planRowsToGrid(rows: PlanRowInput[]): string[][] {
+  return [
+    PLAN_HEADER,
+    ...rows.map((r) => [r.artist, r.fra, r.til, r.dagsbudget, r.type, r.periode, r.periodebudget, r.note]),
+  ];
+}
+
+export function tiltagRowsToGrid(rows: TiltagRowInput[]): string[][] {
+  return [TILTAG_HEADER, ...rows.map((r) => [r.artist, r.fra, r.til, r.gentagelse, r.titel, r.kilde])];
+}
+
+function gridToPlanRows(grid: string[][]): PlanRowInput[] {
+  return grid.slice(1).map((r) => ({
+    artist: r[0] ?? "",
+    fra: r[1] ?? "",
+    til: r[2] ?? "",
+    dagsbudget: r[3] ?? "",
+    type: r[4] ?? "",
+    periode: r[5] ?? "",
+    periodebudget: r[6] ?? "",
+    note: r[7] ?? "",
+  }));
+}
+
+function gridToTiltagRows(grid: string[][]): TiltagRowInput[] {
+  return grid.slice(1).map((r) => ({
+    artist: r[0] ?? "",
+    fra: r[1] ?? "",
+    til: r[2] ?? "",
+    gentagelse: r[3] ?? "",
+    titel: r[4] ?? "",
+    kilde: r[5] ?? "",
+  }));
+}
+
+/** The committed defaults as an editable doc (used when KV is empty). */
+export function seedDoc(): BudgetPlanDoc {
+  return {
+    plan: gridToPlanRows(parseCsv(PLAN_CSV)),
+    tiltag: gridToTiltagRows(parseCsv(TILTAG_CSV)),
+  };
+}
