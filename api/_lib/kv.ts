@@ -90,6 +90,45 @@ export async function writeBudgetDoc(doc: BudgetPlanDoc): Promise<void> {
   await requireKv().set(BUDGET_DOC_KEY, doc);
 }
 
+// --- Bot memory (the kunde-bot's own status store, read/written via MCP) ------
+
+export interface BotStatusEntry {
+  key: string;
+  status: string;
+  note: string | null;
+  updatedAt: string; // ISO
+}
+
+const BOT_STATE_KEY = "bot:state:v1";
+
+/** All saved statuses, newest first, optionally only those updated since a date. */
+export async function readBotState(sinceIso?: string): Promise<BotStatusEntry[]> {
+  const client = kv();
+  if (!client) return [];
+  const doc = (await client.get<Record<string, BotStatusEntry>>(BOT_STATE_KEY)) ?? {};
+  let entries = Object.values(doc);
+  if (sinceIso) entries = entries.filter((e) => e.updatedAt >= sinceIso);
+  return entries.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+export async function saveBotStatus(input: {
+  key: string;
+  status: string;
+  note?: string;
+}): Promise<BotStatusEntry> {
+  const client = requireKv();
+  const doc = (await client.get<Record<string, BotStatusEntry>>(BOT_STATE_KEY)) ?? {};
+  const entry: BotStatusEntry = {
+    key: input.key,
+    status: input.status,
+    note: input.note?.trim() || null,
+    updatedAt: new Date().toISOString(),
+  };
+  doc[input.key] = entry;
+  await client.set(BOT_STATE_KEY, doc);
+  return entry;
+}
+
 export interface ApprovalRecord {
   approvedBy: Role;
   approvedAt: string;
