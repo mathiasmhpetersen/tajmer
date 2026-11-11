@@ -13,7 +13,7 @@ function MobileBar() {
   const items = [
     { slug: "", name: "Oversigt" },
     { slug: "preview", name: "Preview" },
-    ...(isClient ? [] : [{ slug: "budget", name: "Budget" }]),
+    ...(isClient ? [] : [{ slug: "okonomi", name: "Økonomi" }]),
     ...ARTISTS,
   ];
   return (

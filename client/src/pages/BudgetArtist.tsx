@@ -38,7 +38,7 @@ export function BudgetArtist({ slug }: { slug: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center" style={{ color: BC.text }}>
         <h1 className="text-2xl font-semibold">Ukendt kunstner</h1>
-        <Link href="/budget" className="mt-5 text-sm hover:underline" style={{ color: BC.orange }}>
+        <Link href="/okonomi" className="mt-5 text-sm hover:underline" style={{ color: BC.orange }}>
           Tilbage til budget
         </Link>
       </div>
@@ -56,7 +56,7 @@ export function BudgetArtist({ slug }: { slug: string }) {
       {/* header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <Link href="/budget" className="inline-flex items-center gap-1 text-[13px] hover:underline" style={{ color: BC.textGrey }}>
+          <Link href="/okonomi" className="inline-flex items-center gap-1 text-[13px] hover:underline" style={{ color: BC.textGrey }}>
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
               <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="m15 18-6-6 6-6" />
             </svg>
