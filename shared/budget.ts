@@ -214,6 +214,40 @@ export interface BudgetNextAdjustment {
   toDaily: number | null;
 }
 
+// --- In-app editor (KV-backed) ---------------------------------------------
+
+/** One editable Plan row (raw cell strings, same columns as the sheet had). */
+export interface PlanRowInput {
+  artist: string;
+  fra: string;
+  til: string;
+  dagsbudget: string;
+  type: string;
+  periode: string;
+  periodebudget: string;
+  note: string;
+}
+
+/** One editable Tiltag row. */
+export interface TiltagRowInput {
+  artist: string;
+  fra: string;
+  til: string;
+  gentagelse: string;
+  titel: string;
+  kilde: string;
+}
+
+export interface BudgetPlanDoc {
+  plan: PlanRowInput[];
+  tiltag: TiltagRowInput[];
+}
+
+/** Response for GET /api/budget/plan — the doc plus where it came from. */
+export interface BudgetPlanResponse extends BudgetPlanDoc {
+  source: "kv" | "seed";
+}
+
 /** Response for GET /api/budget/overview. */
 export interface BudgetOverviewResponse {
   generatedAt: string;

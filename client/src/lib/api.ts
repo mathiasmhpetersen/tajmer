@@ -9,7 +9,12 @@ import type {
   Role,
   Session,
 } from "@shared/types";
-import type { ArtistBudget, BudgetOverviewResponse } from "@shared/budget";
+import type {
+  ArtistBudget,
+  BudgetOverviewResponse,
+  BudgetPlanDoc,
+  BudgetPlanResponse,
+} from "@shared/budget";
 
 /** Thrown on a 401 so React Query can route the app to the login screen. */
 export class UnauthorizedError extends Error {
@@ -68,6 +73,14 @@ export function fetchArtistBudget(slug: string, nocache = false): Promise<Artist
   return getJson<ArtistBudget>(
     `/api/budget/artist/${encodeURIComponent(slug)}${nocache ? "?nocache=1" : ""}`,
   );
+}
+
+export function fetchBudgetPlan(): Promise<BudgetPlanResponse> {
+  return getJson<BudgetPlanResponse>("/api/budget/plan?nocache=1");
+}
+
+export function saveBudgetPlan(doc: BudgetPlanDoc): Promise<{ ok: boolean }> {
+  return postJson("/api/budget/plan", doc);
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {

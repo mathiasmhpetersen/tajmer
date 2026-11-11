@@ -12,8 +12,8 @@ import type {
   MetaCampaignBudget,
   PaydayMarker,
 } from "../../shared/budget.js";
-import { parseCsv } from "./budget-csv.js";
-import { PLAN_CSV, TILTAG_CSV } from "./budget-data.js";
+import { planRowsToGrid, seedDoc, tiltagRowsToGrid } from "./budget-data.js";
+import { readBudgetDoc } from "./kv.js";
 import {
   addDaysIso,
   artistShowFromEvents,
@@ -60,11 +60,15 @@ interface SheetData {
   warnings: BudgetWarning[];
 }
 
-/** Plan + Tiltag live in the app (api/_lib/budget-data.ts) — no external source. */
-function loadData(): SheetData {
+/**
+ * Plan + Tiltag come from the in-app editor (KV), falling back to the committed
+ * seed in budget-data.ts when nothing has been saved yet. No external source.
+ */
+async function loadData(): Promise<SheetData> {
+  const doc = (await readBudgetDoc().catch(() => null)) ?? seedDoc();
   return {
-    plan: parsePlan(parseCsv(PLAN_CSV)),
-    tiltag: parseTiltag(parseCsv(TILTAG_CSV)),
+    plan: parsePlan(planRowsToGrid(doc.plan)),
+    tiltag: parseTiltag(tiltagRowsToGrid(doc.tiltag)),
     warnings: [],
   };
 }
@@ -194,7 +198,7 @@ function eventsForArtist(events: BudgetEvent[], slug: string): BudgetEvent[] {
 export async function buildArtistBudget(slug: string): Promise<ArtistBudget> {
   const artist = ARTISTS_BY_SLUG[slug];
   const today = todayIso();
-  const { plan, tiltag, warnings: sheetWarnings } = loadData();
+  const { plan, tiltag, warnings: sheetWarnings } = await loadData();
 
   const periods = plan.periods.filter((p) => p.artistSlug === slug);
   const events = eventsForArtist(tiltag.events, slug);
@@ -252,7 +256,7 @@ export async function buildArtistBudget(slug: string): Promise<ArtistBudget> {
 
 export async function buildBudgetOverview(): Promise<BudgetOverviewResponse> {
   const today = todayIso();
-  const { plan, tiltag, warnings: sheetWarnings } = loadData();
+  const { plan, tiltag, warnings: sheetWarnings } = await loadData();
 
   const window = planWindow(plan.periods);
   const { spend, campaigns, adsets, warnings: metaWarnings } = await loadMeta(window.from, window.to);

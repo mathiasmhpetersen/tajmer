@@ -39,7 +39,18 @@ export function BudgetOverview() {
         subtitle="Planlagt budget mod faktisk forbrug pr. kunstner"
         onRefresh={refresh}
         refreshing={query.isFetching}
-        right={<SegControl value={scope} onChange={setScope} />}
+        right={
+          <>
+            <Link
+              href="/okonomi/rediger"
+              className="rounded-[10px] px-3.5 py-2 text-[13px] font-medium"
+              style={{ border: `1px solid ${BC.border}`, color: BC.textDim, background: BC.card }}
+            >
+              Rediger
+            </Link>
+            <SegControl value={scope} onChange={setScope} />
+          </>
+        }
       />
 
       {query.isError ? (

@@ -16,6 +16,7 @@ import { ArtistPage } from "@/pages/ArtistPage";
 import { ClientPreview } from "@/pages/ClientPreview";
 import { BudgetOverview } from "@/pages/BudgetOverview";
 import { BudgetArtist } from "@/pages/BudgetArtist";
+import { BudgetEditor } from "@/pages/BudgetEditor";
 import { Login } from "@/pages/Login";
 
 const FIVE_MIN = 5 * 60 * 1000;
@@ -92,6 +93,7 @@ function Gate({
         <Route path="/preview" component={ClientPreview} />
         <Route path="/">{() => <Layout><Overview /></Layout>}</Route>
         <Route path="/okonomi">{() => <Layout><BudgetOverview /></Layout>}</Route>
+        <Route path="/okonomi/rediger">{() => <Layout><BudgetEditor /></Layout>}</Route>
         <Route path="/okonomi/:slug">
           {(params) => (
             <Layout>
