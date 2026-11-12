@@ -5,17 +5,34 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 process.env.PREVIEW_AGENT_TOKEN = "test-token";
-// Import after the env is set.
-const { default: handler } = await import("./mcp.js");
+const { GET, POST } = await import("./mcp.js");
 
+// Bridge Node's http server to the web-standard GET/POST handlers so a real MCP
+// client can talk to them over a socket (streaming the response for SSE).
 let server: http.Server;
 let url: URL;
 
 beforeAll(async () => {
-  server = http.createServer((req, res) => {
-    // The handler is a Vercel (req,res) function; raw Node req/res are compatible
-    // for what the MCP transport and our auth guard use.
-    void handler(req as never, res as never);
+  server = http.createServer(async (nreq, nres) => {
+    const chunks: Buffer[] = [];
+    for await (const c of nreq) chunks.push(c as Buffer);
+    const hasBody = nreq.method !== "GET" && nreq.method !== "HEAD" && chunks.length > 0;
+    const request = new Request(`http://localhost${nreq.url}`, {
+      method: nreq.method,
+      headers: nreq.headers as Record<string, string>,
+      body: hasBody ? Buffer.concat(chunks) : undefined,
+    });
+    const res = nreq.method === "GET" ? await GET(request) : await POST(request);
+    nres.writeHead(res.status, Object.fromEntries(res.headers.entries()));
+    if (res.body) {
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        nres.write(Buffer.from(value));
+      }
+    }
+    nres.end();
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   url = new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
@@ -33,7 +50,7 @@ describe("MCP route", () => {
     expect(res.status).toBe(401);
   });
 
-  it("lists the expected tools over MCP with the bearer token", async () => {
+  it("lists the five tools over MCP with the bearer token", async () => {
     const client = new Client({ name: "test", version: "1.0.0" });
     const transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers: { Authorization: "Bearer test-token" } },
