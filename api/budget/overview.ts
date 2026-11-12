@@ -6,7 +6,7 @@ import { budgetClientEnabled, buildBudgetOverview } from "../_lib/budget.js";
 export const config = { maxDuration: 60 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = requireAdmin(req, res, { allowClient: budgetClientEnabled() });
+  const session = requireAdmin(req, res, { allowClient: budgetClientEnabled(), allowAgent: true });
   if (!session) return;
   try {
     const data = await buildBudgetOverview();

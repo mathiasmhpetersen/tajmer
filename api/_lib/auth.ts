@@ -86,13 +86,15 @@ export function guard(req: VercelRequest, res: VercelResponse): Session | null {
  * Admin gate for the Budget tool (and future admin-only features). Returns the
  * session for an admin; otherwise writes 401 (unauthenticated) or 403
  * (authenticated but client) and returns null. Pass `allowClient: true` to open
- * it to the client role behind a flag when a client view is switched on later.
+ * it to the client role behind a flag; pass `allowAgent: true` to also accept
+ * the agent bearer token (PREVIEW_AGENT_TOKEN), like the other bot endpoints.
  */
 export function requireAdmin(
   req: VercelRequest,
   res: VercelResponse,
-  opts: { allowClient?: boolean } = {},
+  opts: { allowClient?: boolean; allowAgent?: boolean } = {},
 ): Session | null {
+  if (opts.allowAgent && agentTokenOk(req)) return { role: "admin" };
   const session = getSession(req);
   if (!session) {
     res.status(401).json({ error: "Not authenticated" });

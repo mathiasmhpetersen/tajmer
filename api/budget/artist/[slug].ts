@@ -6,7 +6,7 @@ import { budgetClientEnabled, buildArtistBudget, isKnownArtist } from "../../_li
 export const config = { maxDuration: 60 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = requireAdmin(req, res, { allowClient: budgetClientEnabled() });
+  const session = requireAdmin(req, res, { allowClient: budgetClientEnabled(), allowAgent: true });
   if (!session) return;
 
   const slugParam = req.query.slug;
